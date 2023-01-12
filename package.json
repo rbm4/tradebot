@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "axios": "^0.26.0",
+    "dotenv-safe": "^8.2.0",
+    "querystring": "^0.2.1"
+  }
+}
