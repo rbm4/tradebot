@@ -1,6 +1,7 @@
 require("dotenv-safe").config()
 const { MercadoBitcoin, MercadoBitcoinTrade } = require("./mercadoBitcoin");
 const { Binance } = require("./binance");
+const { Utils } = require("./utils")
 var infoApi = new MercadoBitcoin({ currency: 'XRP' });
 var mbtcTradeApi = new MercadoBitcoinTrade({
     currency: 'XRP',
@@ -10,25 +11,17 @@ var mbtcTradeApi = new MercadoBitcoinTrade({
 var binanceApi = new Binance({currency: 'XRP'})
 var balancesObj = {}
 var ticker = {}
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-function getTickerInfo(pair){
-    for (let t of ticker){
-        if (t.pair == pair){
-            return t
-        }
-    }
-}
+
+
 setTimeout(async () => {
-    console.log("Carregando informações de saldo...")
+    console.log("Loading balance info...")
     const accounts = await mbtcTradeApi.listAccounts()
     const balances = await mbtcTradeApi.listBalance(accounts[0].id)
     for (b of balances){
         balancesObj[b.symbol] = b
     }
-    sleep(1000)
-    console.log("Carregando informações de ordens para as moedas específicas...")
+    await Utils.sleep(1000)
+    console.log("Loading spefic currency info...")
     var moedas = ["LTC","XRP","BCH","ETH"]
     const minBrlOrder = 1
     var minValueSell = {
@@ -45,7 +38,7 @@ setTimeout(async () => {
     ticker = await mbtcTradeApi.tickers(moedas)
     for (let m of moedas){
         let pair = `${m}-BRL`
-        let tickerInfo = getTickerInfo(pair)
+        let tickerInfo = Utils.getTickerInfo(pair)
         let high = tickerInfo.high
         let low = tickerInfo.low
         let current = tickerInfo.last
@@ -58,7 +51,7 @@ setTimeout(async () => {
         if (spreadPercentage <= spreadCut && spreadPercentage >= (spreadCut * -1)){
             console.log(`Market spread less than ${spreadCut}, and higher than ${(spreadCut * -1)} check market prices and currency allocation`)
             //allocate 25% of current balance to operate
-            sleep(1000)
+            await Utils.sleep(1000)
             await mbtcTradeApi.listOrders(accounts[0].id,m)
             const book = await infoApi.orderBook(m)
             const highestask = book.asks[0]
@@ -85,7 +78,7 @@ setTimeout(async () => {
             } else {
                 console.log("Not enough balance to sell")
             }
-            console.log("verify market price and open orders, if they dont meet conditions, cancel then")
+            console.log("Verify market price and open orders, if they dont meet conditions, cancel then")
             const ordersFromThisTicker = []
             for (let o of openOrders){
                 if (o.instrument == pair){
