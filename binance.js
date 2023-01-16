@@ -7,7 +7,7 @@ class Binance {
 
     constructor(config) {
         this.config = {
-            CURRENCY: config.currency
+            
         }
     }
 

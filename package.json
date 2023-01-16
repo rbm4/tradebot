@@ -2,6 +2,8 @@
   "dependencies": {
     "axios": "^0.26.0",
     "dotenv-safe": "^8.2.0",
+    "form-data": "^4.0.0",
+    "mysql2": "^3.0.1",
     "querystring": "^0.2.1"
   }
 }
