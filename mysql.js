@@ -21,7 +21,7 @@ class Mysql{
     }
     async lastOrder(currency,market, side,callback ){
         var sql = "SELECT id, qty, price, side, ticker, based_on_order, market, reason, market_id, `time` FROM tradebot.orders ";
-        var where =  `where ticker like '%${currency}%' and market like '${market}' and side = '${side}'`  
+        var where =  `where ticker like '%${currency}%' and market like '${market}' and side = '${side}' order by time desc`  
         var rowsRet = []
         con.query(sql + where, function(err,rows,fields){
             if (err) {
@@ -32,17 +32,15 @@ class Mysql{
         return rowsRet
 
     }
-    basedOnOrder(id ){
+    basedOnOrder(id,callback ){
         var sql = "SELECT id, qty, price, side, ticker, based_on_order, market, reason, market_id, `time` FROM tradebot.orders ";
-        var where =  `where based_on_order = ${id}`   
-        return con.execute(sql + where, function(err,rows,fields){
+        var where =  `where based_on_order = ${id} order by time desc`   
+        con.query(sql + where, function(err,rows,fields){
             if (err) {
-                console.log(err);
-            }
-            else {
-                return rows;
-            }
-        })     
+                callback(err, null);
+            } else 
+                callback(null, rows);
+        })    
     }
     createOrder(qty,price,side,ticker,based_on_order,market,reason,market_id){
         var sql = `INSERT INTO tradebot.orders (qty, price, side, ticker, based_on_order,market,reason,market_id,time) VALUES('${qty}', '${price}', '${side}', '${ticker}', ${based_on_order}, '${market}', '${reason}', '${market_id}', '${new Date().getTime()}');`

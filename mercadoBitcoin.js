@@ -59,7 +59,7 @@ class MercadoBitcoinTrade {
         let body = {
             externalId: externalId,
             limitPrice: limitPrice,
-            qty: qty,
+            qty: qty.toFixed(8) + "",
             side: side,
             type: type
         }
