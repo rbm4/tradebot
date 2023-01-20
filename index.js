@@ -13,8 +13,12 @@ var mbtcTradeApi = new MercadoBitcoinTrade({
     key: process.env.KEY,
     secret: process.env.SECRET,
 })
-var binanceApi = new Binance()
+var binanceApi = new Binance({
+    key: process.env.BINANCE_KEY,
+    secret: process.env.BINANCE_SECRET,
+})
 var balancesObj = {}
+var balancesObjBinance = {}
 var ticker = {}
 
 // Initialization
@@ -23,10 +27,13 @@ init();
 function init() {
     setTimeout(async () => {
         try {
+           // await runBinanceBlock();
             await runMbtcBlock();
+            
          }
          catch (e) {
             console.log("supress exception")
+            console.log(e)
          } finally {
             init();
          }
@@ -34,10 +41,34 @@ function init() {
         process.env.CRAWLER_INTERVAL
     );
 }
-
+//Binance script
+async function runBinanceBlock(){
+    console.log("Running binance block...")
+    const accountInfo = await binanceApi.accountInfo()
+    for (b of accountInfo.balances){
+        balancesObjBinance[b.asset] = b
+    }
+    await utils.sleep(1000)
+    console.log("Loading spefic currency info from binance...")
+    var moedas = ["BCH"]
+    var minValueSell = {
+        "LTC": "0.001",
+        "XRP": "0.1",
+        "BCH": "0.002",
+        "ETH": "0.001",
+    }
+    var spreadCut =  process.env.MARKET_CUT
+    var percentagePriceCalc = process.env.PERCENTAGE_PRICE_CALC //0,90%
+    var balanceCutForSpendFiat = process.env.BALANCE_CUT_SPEND_FIAT
+    var balanceCutForSpendCripto = process.env.BALANCE_CUT_SPEND_CRYPTO 
+    ticker = await binanceApi.tickers(moedas)
+    //need to convert fiat into usdt - done using Binance UI
+    
+    console.log(ticker)
+}
 //Mercado bitcoin script
 async function runMbtcBlock(){
-    console.log("Loading balance info...")
+    console.log("Running Mercado Bitcoin block...")
     const accounts = await mbtcTradeApi.listAccounts()
     var balances = await mbtcTradeApi.listBalance(accounts[0].id)
     for (b of balances){
@@ -54,10 +85,16 @@ async function runMbtcBlock(){
         "ETH": "0.001",
     }
     const openOrders = await mbtcTradeApi.listPositions(accounts[0].id,moedas)
+    // Market cut - Do not operate if Lowest trade differs (positively or negatively) from the current trade price in the last 24h
     var spreadCut = 3
-    var percentagePriceCalc = 0.0095//0,90%
+    //Percentage price calc - the amount of % higher or lower to buy or sell assets given their last order (mbtc takes 0.7% cut - equivalent to a minimum of 0.007 in this field)
+    var percentagePriceCalc = 0.0095
+    //Balance cut spend for fiat - the amount of fiat % the script should spend in each run, for a specific ticker, this value is based on the maximum balance, not the available balance
+    //It is desireable to spend less % if you have a bigger balance
     var balanceCutForSpendFiat = 0.25
     var balanceCutForSpendCripto = 0.25
+    
+
     ticker = await mbtcTradeApi.tickers(moedas)
     
     await checkMbtcTickers(moedas, spreadCut, accounts, balanceCutForSpendFiat, percentagePriceCalc, balanceCutForSpendCripto, minValueSell, minBrlOrder, openOrders);
@@ -110,6 +147,7 @@ async function checkAndCancelOrders(openOrders, pair, accounts, highesbidPrice, 
             ordersFromThisTicker = ordersFromThisTicker.concat(o);
         }
     }
+    //If current price to buy or sell is farther than this percentage, then cancel the order and create again (if you dont want this feature to avoid losses, just but 100% here)
     const orderDisparity = 0.025; //2.5% multiplier
     for (let o of ordersFromThisTicker) {
         const orderInfo = await mbtcTradeApi.listOrder(accounts[0].id, o.instrument, o.id);
