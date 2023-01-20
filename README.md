@@ -11,7 +11,7 @@ Este não é um projeto de machine learning, mas apenas uma aplicação básica 
 ## Como usar
 - Necessário Node.js (https://nodejs.org/en/download/) e npm
 - Necessário chaves de API (https://api.mercadobitcoin.net/api/v4/docs) ou (https://binance-docs.github.io/apidocs/spot/en/#introduction)
-- Configurar as margens de mercado:
+- Configurar as margens de mercado, localizadas no arquivo index.js, exemplo de variáveis do Mercado Bitcoin:
 ```
     // Market cut (percentage) - Do not operate if Lowest trade differs (positively or negatively) from the current trade price in the last 24h
     var spreadCut = 3
