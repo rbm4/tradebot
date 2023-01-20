@@ -1,5 +1,5 @@
 # Tradebot
-Bot de trade em node.js para uso no Mercado bitcoin (https://www.mercadobitcoin.com.br/). A utilização de Bots para Trading oferece algumas vantagens, baseado na raiz da velocidade da tomada de decisão, permitindo relizar operações que um humano comum não conseguiria, buscando a margem mínima de lucro e realizando operações em escala de compra e venda. 
+Bot de trade em node.js para uso em exchanges. A utilização de Bots para Trading oferece algumas vantagens, baseado na raiz da velocidade da tomada de decisão, permitindo relizar operações que um humano comum não conseguiria, buscando a margem mínima de lucro e realizando operações em escala de compra e venda. 
 
 Este não é um projeto de machine learning, mas apenas uma aplicação básica de regras e funções integradas com a casa de câmbio "Mercado bitcoin"
 
