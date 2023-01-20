@@ -9,9 +9,8 @@ Este não é um projeto de machine learning, mas apenas uma aplicação básica 
 - Execução, por meio de script, no arquivo index.js, 
 
 ## Como usar
-- Necessário node.js e npm
-- Necessário chaves de API (https://api.mercadobitcoin.net/api/v4/docs) - (https://binance-docs.github.io/apidocs/spot/en/#introduction)
-- Node (https://nodejs.org/en/download/) e npm
+- Necessário Node.js (https://nodejs.org/en/download/) e npm
+- Necessário chaves de API (https://api.mercadobitcoin.net/api/v4/docs) ou (https://binance-docs.github.io/apidocs/spot/en/#introduction)
 - Configurar as margens de mercado:
 ```
     // Market cut (percentage) - Do not operate if Lowest trade differs (positively or negatively) from the current trade price in the last 24h
@@ -23,16 +22,20 @@ Este não é um projeto de machine learning, mas apenas uma aplicação básica 
     var balanceCutForSpendFiat = 0.25
     var balanceCutForSpendCripto = 0.25
 ```
-
-    
+- Executar os comandos para baixar dependências e para rodar a aplicação:   
 ```
 npm install
 node index.js
 ```
 
-
-## Features futuras
-- Implementação com Binance
+## Features futuras (idealizadas)
+- Integração com Binance
+- Algorithmic Trading Profiles
+- Mathematical Model-Based Strategies
+- Binance Websocket
+- Binance fiat conversion
+- Market trending
+- Machine learning
 
 # Tradebot
 Trading bot in node.js for use in Mercado bitcoin (https://www.mercadobitcoin.com.br/)
