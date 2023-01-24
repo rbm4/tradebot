@@ -16,7 +16,39 @@ class Binance {
     ping() {
         return this.call(`${ENDPOINT_API}/api/v3/ping`);
     }
-
+    exchangeInfo(symbols){
+        var tickers = []
+        for (let m of symbols){
+            tickers.push(`${m}BUSD`)
+        }
+        return this.client.exchangeInfo({ symbols: tickers }).then(response => {
+            return response.data
+        }).catch(e => this.client.logger.error(e))
+    }
+    coinInfo(){
+        return this.client.coinInfo().then(response => {
+            return response.data
+        }).catch(e => this.client.logger.error(e))
+    }
+    getOpenOrders(pair){
+        return this.client.openOrders({ symbol: pair }).then(response => {
+            return response.data
+        })
+    }
+    getOpenOrder(pair,id){
+        return this.client.getOrder(pair, {
+            orderId: id
+          }).then(response => {
+            return response.data
+          })
+    }
+    cancelOrder(pair,id){
+        return this.client.cancelOrder(pair, {
+            orderId: id
+          }).then(response => {
+            return response.data
+          }).catch(error => this.client.logger.error(error))
+    }
     accountInfo() {
         return this.client.account().then(response => {
             return response.data
@@ -26,7 +58,7 @@ class Binance {
     tickers(moedas){
         var tickers = []
         for (let m of moedas){
-            tickers.push(`${m}USDT`)
+            tickers.push(`${m}BUSD`)
         }
         return this.client.bookTicker("",tickers).then(response => {
             return response.data
@@ -34,12 +66,12 @@ class Binance {
     }
 
     placeOrder(ticker,side,type,price,amount){
-        client.newOrder(ticker, side, type, {
+        return this.client.newOrder(ticker, side, type, {
             price: price,
-            quantity: amount,
+            quantity: amount.toFixed(8) + "",
             timeInForce: 'GTC'
-          }).then(response => client.logger.log(response.data))
-            .catch(error => client.logger.error(error))
+          }).then(response => {return response.data})
+            .catch(error => this.client.logger.error(error))
     }
 
     async call(url) {

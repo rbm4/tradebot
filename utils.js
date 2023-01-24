@@ -12,6 +12,13 @@ class Utils {
             }
         }
     }
+    getTickerInfoBinance(pair,ticker){
+        for (let t of ticker){
+            if (t.symbol == pair){
+                return t
+            }
+        }
+    }
 }
 
 module.exports = {
