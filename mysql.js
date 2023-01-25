@@ -21,7 +21,7 @@ class Mysql{
     }
     async lastOrder(currency,market, side,callback ){
         var sql = "SELECT id, qty, price, side, ticker, based_on_order, market, reason, market_id, `time` FROM tradebot.orders ";
-        var where =  `where ticker like '%${currency}%' and market like '${market}' and side = '${side}' order by time desc`  
+        var where =  `where based_on_order is null and ticker like '%${currency}%' and market like '${market}' and side = '${side}' order by time desc`  
         var rowsRet = []
         con.query(sql + where, function(err,rows,fields){
             if (err) {

@@ -3,6 +3,8 @@ const axios = require('axios');
 const qs = require('querystring')
 const crypto = require('crypto')
 var FormData = require('form-data');
+var https = require('follow-redirects').https;
+var fs = require('fs');
 var data = new FormData();
 
 const ENDPOINT_API = 'https://www.mercadobitcoin.net/api/';
@@ -34,7 +36,7 @@ class MercadoBitcoinTrade {
         return await this.callGet(`${TRADE_API}/accounts/${accountId}/${symbol}/orders/${id}`)
     }
     async cancelOrder(accountId,symbol,id){
-        return this.simpleCallDelete(`${TRADE_API}/accounts/${accountId}/${symbol}/orders/${id}`)
+        return await this.simpleCallDelete(`${TRADE_API}/accounts/${accountId}/${symbol}/orders/${id}`)
     }
     async listPositions(accountId,moedas){
         var tickers = ""
@@ -132,9 +134,50 @@ class MercadoBitcoinTrade {
     }
     async simpleCallDelete(method){
         var token = await this.authorize()
+        var options = {
+            'method': 'DELETE',
+            'hostname': 'api.mercadobitcoin.net',
+            'path': method,
+            'headers': {
+              'Authorization': token.access_token
+            },
+            'maxRedirects': 20
+          };
+          console.log(token)
+          var req = https.request(options, function (res) {
+            var chunks = [];
+          
+            res.on("data", function (chunk) {
+              chunks.push(chunk);
+            });
+          
+            res.on("end", function (chunk) {
+              var body = Buffer.concat(chunks);
+              console.log(body.toString());
+            });
+          
+            res.on("error", function (error) {
+              console.error(error);
+            });
+          });
+          
+          var postData = "------WebKitFormBoundary7MA4YWxkTrZu0gW\r\nContent-Disposition: form-data; ------WebKitFormBoundary7MA4YWxkTrZu0gW--";
+          
+          req.setHeader('Content-Length', postData.length);
+          
+          req.setHeader('content-type', 'multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW');
+          
+          req.write(postData);
+          
+          req.end();
+        
+        
+        
+        /*
         var config = {
+            timeout: 20000 * 5,
+            proxy: false,
             method: 'delete',
-            url: method,
             headers: { 
               'Authorization': 'Bearer ' + token.access_token, 
               ...data.getHeaders()
@@ -142,7 +185,9 @@ class MercadoBitcoinTrade {
             data : data
           };
           
-        return axios(config);
+        const response = await axios.delete(method,config)
+        if (response.data.message) console.error(response.data.message)
+        return response.data */
     }
 }
 
