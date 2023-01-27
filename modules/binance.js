@@ -66,12 +66,22 @@ class Binance {
     }
 
     placeOrder(ticker,side,type,price,amount){
-        return this.client.newOrder(ticker, side, type, {
-            price: price,
-            quantity: amount.toFixed(8) + "",
-            timeInForce: 'GTC'
-          }).then(response => {return response.data})
-            .catch(error => this.client.logger.error(error))
+        if (type == "LIMIT"){
+            return this.client.newOrder(ticker, side, type, {
+                price: price,
+                quantity: amount,
+                timeInForce: 'GTC'
+              }).then(response => {return response.data})
+                .catch(error => this.client.logger.error(error))
+        } else if (type == "MARKET"){
+            return this.client.newOrder(ticker, side, type, {
+                price: price,
+                timeInForce: 'GTC'
+              }).then(response => {return response.data})
+                .catch(error => this.client.logger.error(error))
+        }
+
+        
     }
 
     async call(url) {

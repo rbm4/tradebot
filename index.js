@@ -1,14 +1,21 @@
 require("dotenv-safe").config()
-const { MercadoBitcoin, MercadoBitcoinTrade } = require("./mercadoBitcoin");
-const { Binance } = require("./binance");
+const { MercadoBitcoin, MercadoBitcoinTrade } = require("./modules/mercadoBitcoin");
+const { Binance } = require("./modules/binance");
 const { Utils } = require("./utils")
-const { Mysql } = require("./mysql")
+const { Mysql } = require("./modules/mysql")
+//const { Foxbit } = require("./modules/foxbit")
 
 // Needed Global variables
 var mysql = new Mysql();
 var infoApi = new MercadoBitcoin();
 var utils = new Utils();
 mysql.connect()
+/*
+var foxbitApi = new Foxbit({
+    key: process.env.FOXBIT_KEY,
+    secret: process.env.FOXBIT_SECRET,
+    userId: process.env.FOXBIT_USERID
+}) */
 var mbtcTradeApi = new MercadoBitcoinTrade({
     key: process.env.KEY,
     secret: process.env.SECRET,
@@ -28,8 +35,8 @@ init();
 function init() {
     setTimeout(async () => {
         try {
-            //await runBinanceBlock();
-            await runMbtcBlock();
+            runBinanceBlock();
+            runMbtcBlock();
 
         }
         catch (e) {
@@ -44,50 +51,52 @@ function init() {
 }
 //Binance script
 async function runBinanceBlock() {
-    console.log("Running binance block...")
-    await updateBinanceBalance();
-    await utils.sleep(1000)
-    console.log("Loading spefic currency info from binance...")
-    var moedas = ["BCH"]
-    var marketConfigs = {
-        percentagePriceCalc: 0.002,
-        balanceCutForSpendFiat: 0.15,
-        balancecutForSpendCripto: 0.15,
-        orderDisparity: 0.025,
-        minValueSellBUSD: 10
-
+    try {
+        console.log("Running binance block...")
+        await updateBinanceBalance();
+        await utils.sleep(100)
+        console.log("Loading spefic currency info from binance...")
+        var moedas = ["BCH"]
+        var marketConfigs = {
+            percentagePriceCalc: 0.001,
+            balanceCutForSpendFiat: 0.15,
+            balancecutForSpendCripto: 0.15,
+            orderDisparity: 0.02,
+            minValueSellBUSD: 10
+    
+        }
+        var exchangeInfo = await binanceApi.exchangeInfo(moedas)
+        for (let i of exchangeInfo.symbols){
+            exchangeInfoBinance[i.symbol] = i
+        }
+        var tickers = await binanceApi.tickers(moedas)
+        //need to convert fiat into usdt - done using Binance UI
+        for (let m of moedas) {
+            let pair = `${m}BUSD`;
+            let info = exchangeInfoBinance[pair]
+            let filters = info.filters
+            let tickerInfo = utils.getTickerInfoBinance(pair, tickers);
+            //let high = tickerInfo.high;
+            //let low = tickerInfo.low;
+            let bid = tickerInfo.bidPrice; //price of buy orders
+            let ask = tickerInfo.askPrice; //price of sell orders
+            //let spreadPercentage = 100 - ((100 * tickerInfo.low) / tickerInfo.last); 
+            console.log(`Pair: ${pair}`);
+            console.log(`Bid: ${bid} Ask ${ask}`);
+            //console.log(`SpreadPercentage: ${spreadPercentage}`);
+            await checkAndCancelBinanceOrders(pair, bid, ask, marketConfigs.orderDisparity,m, marketConfigs.percentagePriceCalc);
+    
+            await checkMarketSpreadBinance(marketConfigs, pair, bid, ask, m,info);
+    
+    
+            console.log("-------------");
+    
+    
+        }
+        //console.log(ticker)
+    } catch (e){
+        console.log("supress binance exception")
     }
-    var exchangeInfo = await binanceApi.exchangeInfo(moedas)
-    for (let i of exchangeInfo.symbols){
-        exchangeInfoBinance[i.symbol] = i
-    }
-    var tickers = await binanceApi.tickers(moedas)
-    //need to convert fiat into usdt - done using Binance UI
-    for (let m of moedas) {
-        let pair = `${m}BUSD`;
-        let info = exchangeInfoBinance[pair]
-        let filters = info.filters
-        console.log(filters)
-        let tickerInfo = utils.getTickerInfoBinance(pair, tickers);
-        //let high = tickerInfo.high;
-        //let low = tickerInfo.low;
-        let bid = tickerInfo.bidPrice; //price of buy orders
-        let ask = tickerInfo.askPrice; //price of sell orders
-        //let spreadPercentage = 100 - ((100 * tickerInfo.low) / tickerInfo.last); 
-        console.log(`Pair: ${pair}`);
-        console.log(`Bid: ${bid} Ask ${ask}`);
-        //console.log(`SpreadPercentage: ${spreadPercentage}`);
-        await checkAndCancelBinanceOrders(pair, bid, ask, marketConfigs.orderDisparity);
-
-        await checkMarketSpreadBinance(marketConfigs, pair, bid, ask, m,info);
-
-
-        console.log("-------------");
-
-
-    }
-
-    console.log(ticker)
 }
 
 async function updateBinanceBalance() {
@@ -98,7 +107,6 @@ async function updateBinanceBalance() {
 }
 
 async function checkMarketSpreadBinance(marketConfigs, pair, bid, ask, currency,exchangeInfo) {
-    console.log(exchangeInfo)
     var priceFilter = {}
     var lotSize = {}
     for (let f of exchangeInfo.filters){
@@ -109,12 +117,12 @@ async function checkMarketSpreadBinance(marketConfigs, pair, bid, ask, currency,
         }
     }
     await updateBinanceBalance()
-    await checkBuyBinance(currency, marketConfigs, ask, priceFilter, pair);
+    if (!shouldHaltBuyingBinance) await checkBuyBinance(currency, marketConfigs, bid, priceFilter, pair);
     await updateBinanceBalance()
-    await checkSellBinance(currency, marketConfigs, bid, priceFilter, pair,lotSize);
+    if (!shouldHaltSellingBinance) await checkSellBinance(currency, marketConfigs, ask, priceFilter, pair,lotSize);
 }
 async function checkSellBinance(currency, marketConfigs, bid, priceFilter, pair,lotSize){
-    const sellPrice = bid + (bid * marketConfigs.percentagePriceCalc)
+    const sellPrice = (bid * 1) + (bid * marketConfigs.percentagePriceCalc)
     var currentCriptoBalance = balancesObjBinance[currency]
     var latestBuyOrderInThisTicker = []
     await mysql.lastOrder(pair, "BINANCE", "BUY", function (err, content) {
@@ -127,24 +135,24 @@ async function checkSellBinance(currency, marketConfigs, bid, priceFilter, pair,
     });
     await utils.sleep(100)
     latestBuyOrderInThisTicker = resultQuery
-    if ((currentCriptoBalance > lotSize) && (currentCriptoBalance * sellPrice > marketConfigs.minValueSellBUSD)) {
+    //console.log(currentCriptoBalance)
+   // console.log(`my current free balance for ${currency} is ${currentCriptoBalance.free}`)
+    //console.log(`my current sell price based on market is ${sellPrice}`)
+    //console.log(`my order should value around  ${currentCriptoBalance.free * sellPrice}, and the minimum is  ${marketConfigs.minValueSellBUSD}`)
+    if ((currentCriptoBalance.free * sellPrice > marketConfigs.minValueSellBUSD)) {
         var formattedPrice = toFixedNotRound(sellPrice, 1);
-        if (formattedPrice == bid) {
+        if ((formattedPrice * 1) == (bid * 1)) {
             formattedPrice = formattedPrice + priceFilter.tickSize;
             var priceComposition = (formattedPrice + "").split(".");
             formattedPrice = `${priceComposition[0]}.${priceComposition[1].substring(0, 3)}`;
         }
-        const amount2 = currentFiatBalance / formattedPrice
-        if (price > ask) {
-            console.log("calculated price is lower than current market, set price to market value")
-            price = ask
-        }
-        var calc = amount2.split(".");
+
+        var calc = currentCriptoBalance.free.split(".");
         calc = `${calc[0]}.${calc[1].substring(0, 3)}`;
-        console.log(calc);
         if (latestBuyOrderInThisTicker.length < 1) {
             //create order
-            mysql.createOrder(availableCriptoCurrencyToSpend, sellPrice, "sell", `${m}-BRL`, null, "MBTC", "Selling based on market value", null)
+            console.log(`sell ${calc} ${currency} priced at ${formattedPrice}`);
+            mysql.createOrder(calc, formattedPrice, "SELL", pair, null, "BINANCE", "Selling based on market value", null)
             await binanceApi.placeOrder(pair,"SELL","LIMIT",formattedPrice,calc)
         } 
     }
@@ -166,7 +174,7 @@ async function checkBuyBinance(currency, marketConfigs, ask, priceFilter, pair) 
     if (freeBalance > marketConfigs.minValueSellBUSD) {
         console.log("I do have balance to spend, try to buy cripto");
         if (latestBuyOrderInThisTicker.length < 1) {
-            normalMarketBuyBinance(freeBalance, marketConfigs, ask, currency, priceFilter, pair);
+            await normalMarketBuyBinance(freeBalance, marketConfigs, ask, currency, priceFilter, pair);
         } else {
             var basedOnResult = undefined
             await mysql.basedOnOrder(latestBuyOrderInThisTicker[0].id, function (err, content) {
@@ -179,8 +187,12 @@ async function checkBuyBinance(currency, marketConfigs, ask, priceFilter, pair) 
             });
             await utils.sleep(50)
             if (basedOnResult.length > 0) {
-                normalMarketBuyBinance(freeBalance, marketConfigs, ask, currency, priceFilter, pair);
+                await normalMarketBuyBinance(freeBalance, marketConfigs, ask, currency, priceFilter, pair);
             } else {
+                await normalMarketBuyBinance(freeBalance, marketConfigs, ask, currency, priceFilter, pair);
+            }
+            //based on price will be checked later - for now script is buying entirely based on market price
+            /*else {
                 var price = new Number(latestBuyOrderInThisTicker[0].price) - (latestBuyOrderInThisTicker[0].price * percentagePriceCalc)
                 var formattedPrice = toFixedNotRound(price, 1);
                 console.log(formattedPrice);
@@ -201,15 +213,15 @@ async function checkBuyBinance(currency, marketConfigs, ask, priceFilter, pair) 
                 mysql.createOrder(calc, formattedPrice, "BUY", pair, latestBuyOrderInThisTicker[0].id, "BINANCE", "creating order based on last order", null)
                 //await binanceApi.placeOrder(pair,"BUY","LIMIT",formattedPrice,calc)
 
-            }
-            utils.sleep(10000)
+            } */
+            utils.sleep(1000)
         }
 
         
     }
 }
 
-function normalMarketBuyBinance(freeBalance, marketConfigs, ask, currency, priceFilter, pair) {
+async function normalMarketBuyBinance(freeBalance, marketConfigs, ask, currency, priceFilter, pair) {
     var fiatAmount = 0;
     if (freeBalance < marketConfigs.minValueSellBUSD * 2) {
         console.log("however i can create only 1 order, spend the entire balance");
@@ -223,7 +235,6 @@ function normalMarketBuyBinance(freeBalance, marketConfigs, ask, currency, price
     var priceToBuy = ask - (ask * marketConfigs.percentagePriceCalc);
     console.log(`ask price for ${currency} is ${ask}`);
     var formattedPrice = toFixedNotRound(priceToBuy, 1);
-    console.log(formattedPrice);
     if (formattedPrice == ask) {
         formattedPrice = formattedPrice - priceFilter.tickSize;
         var priceComposition = (formattedPrice + "").split(".");
@@ -231,9 +242,8 @@ function normalMarketBuyBinance(freeBalance, marketConfigs, ask, currency, price
     }
     var calc = (fiatAmount / formattedPrice + "").split(".");
     calc = `${calc[0]}.${calc[1].substring(0, 3)}`;
-    console.log(calc);
     console.log(`spend ${fiatAmount} buying ${currency} which totalizes in a buy order of ${calc} BCH priced at ${formattedPrice}`);
-    //await binanceApi.placeOrder(pair,"BUY","LIMIT",formattedPrice,calc)
+    await binanceApi.placeOrder(pair,"BUY","LIMIT",formattedPrice,calc)
     mysql.createOrder(calc, formattedPrice, "buy", pair, null, "BINANCE", "Normal market buy order", null);
 }
 
@@ -241,7 +251,9 @@ function toFixedNotRound(number, decimals) {
     var x = Math.pow(10, Number(decimals) + 1);
     return (Number(number) + (1 / x)).toFixed(decimals)
 }
-async function checkAndCancelBinanceOrders(pair, bid, ask, orderDisparity) {
+var shouldHaltBuyingBinance = false;
+var shouldHaltSellingBinance = false;
+async function checkAndCancelBinanceOrders(pair, bid, ask, orderDisparity, currency,percentagePriceCalc) {
     var openOrders = await binanceApi.getOpenOrders(pair)
     for (let o of openOrders) {
         var orderDetails = await binanceApi.getOpenOrder(pair, o.orderId)
@@ -249,19 +261,31 @@ async function checkAndCancelBinanceOrders(pair, bid, ask, orderDisparity) {
         var orderSide = orderDetails.side //BUY,SELL
         if (orderSide == "BUY") {
             //compare to bid
-            console.log(`Is ${price * orderDisparity + price} lower than ${bid}?`)
-            if ((price * orderDisparity + price) < bid) {
-                console.log("yes")
+            console.log(`Is ${price * percentagePriceCalc + price} lower than ${bid}?`)
+            if ((price * percentagePriceCalc + price) < bid) {
+                console.log("yes - buy orders can be much close to bid value")
                 binanceApi.cancelOrder(pair, o.orderId);
-                mysql.createOrder(o.origQty, price, o.side, pair, 0, "BINANCE", "Cancel, market price too low for buy", o.orderId)
+                await updateBinanceBalance()
+                mysql.createOrder(o.origQty, price, o.side, pair, 0, "BINANCE", "Cancel, market price too low for current buy price", o.orderId)
             }
         } else if (orderSide == "SELL") {
             //compare to ask
             console.log(`Is ${price - (price * orderDisparity)} higher than ${ask}?`);
-            if (price - (price * orderDisparity) > highestaskPrice) {
+            if (price - (price * orderDisparity) > ask) {
                 console.log("yes")
                 binanceApi.cancelOrder(pair, o.orderId);
+                await updateBinanceBalance()
                 mysql.createOrder(o.origQty, price, o.side, pair, 0, "BINANCE", "Cancel, market price too low for sell", o.orderId)
+                //sell cripto balance in order to avoid damage
+                if ((process.env.AVOID_DAMAGE_BINANCE == "TRUE")){
+                    mysql.createOrder(o.origQty, price, o.side, pair, 0, "BINANCE", "Selling instantly to avoid bigger losses", o.orderId)
+                    binanceApi.placeOrder(pair,"SELL","MARKET",null,balancesObjBinance[currency].free)
+                    //halt buying for sometime
+                    shouldHaltBuyingBinance = true
+                    setTimeout(() => {
+                        shouldHaltBuyingBinance = false
+                    },process.env.HALT_BUY_TIME_BINANCE * 60000)
+                }
             }
         }
     }
@@ -269,39 +293,43 @@ async function checkAndCancelBinanceOrders(pair, bid, ask, orderDisparity) {
 
 //Mercado bitcoin script
 async function runMbtcBlock() {
-    console.log("Running Mercado Bitcoin block...")
-    const accounts = await mbtcTradeApi.listAccounts()
-    var balances = await mbtcTradeApi.listBalance(accounts[0].id)
-    for (b of balances) {
-        balancesObj[b.symbol] = b
+    try{
+
+        console.log("Running Mercado Bitcoin block...")
+        const accounts = await mbtcTradeApi.listAccounts()
+        var balances = await mbtcTradeApi.listBalance(accounts[0].id)
+        for (b of balances) {
+            balancesObj[b.symbol] = b
+        }
+        await utils.sleep(1000)
+        // Market Margins variables
+        console.log("Loading spefic currency info...")
+        var moedas = ["LTC"]
+        const minBrlOrder = 1
+        var minValueSell = {
+            "LTC": "0.001",
+            "XRP": "0.1",
+            "BCH": "0.002",
+            "ETH": "0.001",
+        }
+        const openOrders = await mbtcTradeApi.listPositions(accounts[0].id, moedas)
+        // Market cut (percentage) - Do not operate if Lowest trade differs (positively or negatively) from the current trade price in the last 24h
+        var spreadCut = 6
+        // Percentage price calc - the amount of % higher or lower to buy or sell assets given their last order (mbtc takes 0.7% cut - equivalent to a minimum of 0.007 in this field)
+        var percentagePriceCalc = 0.006 // 0.6% - Mercado bitcoin taxes are 0.7% taker 0.3% maker - this is a 0.3% margin for each trade
+        // Balance cut spend for fiat - the amount of fiat (BRL) % the script should spend in each run, for a specific ticker, this value is based on the maximum balance, not the available balance
+        // It is desireable to spend less % if you have a bigger balance
+        var balanceCutForSpendFiat = 0.25
+        var balanceCutForSpendCripto = 0.25
+    
+    
+        ticker = await mbtcTradeApi.tickers(moedas)
+    
+        await checkMbtcTickers(moedas, spreadCut, accounts, balanceCutForSpendFiat, percentagePriceCalc, balanceCutForSpendCripto, minValueSell, minBrlOrder, openOrders);
+        console.log("Remaining open positions")
+    } catch (e){
+        console.log("supress mbtc exception")
     }
-    await utils.sleep(1000)
-    // Market Margins variables
-    console.log("Loading spefic currency info...")
-    var moedas = ["LTC"]
-    const minBrlOrder = 1
-    var minValueSell = {
-        "LTC": "0.001",
-        "XRP": "0.1",
-        "BCH": "0.002",
-        "ETH": "0.001",
-    }
-    const openOrders = await mbtcTradeApi.listPositions(accounts[0].id, moedas)
-    // Market cut (percentage) - Do not operate if Lowest trade differs (positively or negatively) from the current trade price in the last 24h
-    var spreadCut = 3
-    // Percentage price calc - the amount of % higher or lower to buy or sell assets given their last order (mbtc takes 0.7% cut - equivalent to a minimum of 0.007 in this field)
-    var percentagePriceCalc = 0.006 // 0.6% - Mercado bitcoin taxes are 0.7% taker 0.3% maker - this is a 0.3% margin for each trade
-    // Balance cut spend for fiat - the amount of fiat (BRL) % the script should spend in each run, for a specific ticker, this value is based on the maximum balance, not the available balance
-    // It is desireable to spend less % if you have a bigger balance
-    var balanceCutForSpendFiat = 0.25
-    var balanceCutForSpendCripto = 0.25
-
-
-    ticker = await mbtcTradeApi.tickers(moedas)
-
-    await checkMbtcTickers(moedas, spreadCut, accounts, balanceCutForSpendFiat, percentagePriceCalc, balanceCutForSpendCripto, minValueSell, minBrlOrder, openOrders);
-    console.log("Remaining open positions")
-    console.log(`Finished. Queing again in ${process.env.CRAWLER_INTERVAL / 1000} seconds`)
 
 }
 
@@ -328,7 +356,7 @@ async function checkMbtcTickers(moedas, spreadCut, accounts, balanceCutForSpendF
         const highestaskPrice = highestask[0];
         const highesbidPrice = highestBid[0];
         const orderDisparity = 0.025; //2.5% multiplier
-        await checkAndCancelOrders(openOrders, pair, accounts, highesbidPrice, highestaskPrice,orderDisparity);
+        await checkAndCancelOrders(openOrders, pair, accounts, highesbidPrice, highestaskPrice,orderDisparity,spreadPercentage);
 
         await checkMarketSpread(spreadPercentage, spreadCut, accounts, m, balanceCutForSpendFiat, highesbidPrice, percentagePriceCalc, balanceCutForSpendCripto, minValueSell, minBrlOrder, highestaskPrice,orderDisparity);
 
@@ -377,13 +405,11 @@ async function checkMarketSpread(spreadPercentage, spreadCut, accounts, m,
     if (spreadPercentage <= spreadCut && spreadPercentage >= (spreadCut * -1)) {
         console.log(`Market spread less than ${spreadCut}, and higher than ${(spreadCut * -1)} check market prices and currency allocation`);
         //allocate 25% of current balance to operate
-        await utils.sleep(1000);
         await mbtcTradeApi.listOrders(accounts[0].id, m);
 
         await checkBuy(balanceCutForSpendFiat, percentagePriceCalc, m, highestaskPrice, minValueSell, minBrlOrder, accounts);
 
         await checkSell(highesbidPrice, percentagePriceCalc, m, balanceCutForSpendCripto, minValueSell, minBrlOrder, accounts,orderDisparity);
-        utils.sleep(1000);
     } else {
         console.log(`Market spread is higher than 3%, dont buy or sell`);
     }
@@ -438,7 +464,6 @@ async function checkAndCreateSellOrder(latestBuyOrderInThisTicker, availableCrip
                 basedOnResult = content;
             }
         });
-        console.log(latestBuyOrderInThisTicker[0]);
         await utils.sleep(100);
         if (basedOnResult > 0) {
             mysql.createOrder(availableCriptoCurrencyToSpend, sellPrice, "sell", `${m}-BRL`, null, "MBTC", "Selling based on market value", null);
@@ -498,7 +523,6 @@ async function checkAndCreateBuyOrder(latestBuyOrderInThisTicker, highestaskPric
     } else {
         var basedOnResult = undefined;
         // is cancelled order?
-        console.log(latestBuyOrderInThisTicker[0]);
         if (latestBuyOrderInThisTicker[0].based_on_order == 0) {
             mysql.createOrder(amount, price, "buy", `${m}-BRL`, null, "MBTC", "lower than highestbid normal buy order", null);
             mbtcTradeApi.placeOrder(accounts[0].id, `${m}-BRL`, null, price, amount, "buy", "limit");

@@ -58,10 +58,16 @@ class MercadoBitcoinTrade {
         return await this.callGet(`${TRADE_API}/tickers?symbols=${tickers}`)
     }
     async placeOrder(accountId,symbol,externalId,limitPrice,qty,side,type){
+        var formattedQty = (qty + "").split(".");
+        formattedQty = `${formattedQty[0]}.${formattedQty[1].substring(0, 8)}`;
+
+        var price = (limitPrice + "").split(".");
+        price = `${price[0]}.${price[1].substring(0, 8)}`;
+        
         let body = {
             externalId: externalId,
-            limitPrice: limitPrice,
-            qty: qty.toFixed(8) + "",
+            limitPrice: price * 1,
+            qty: formattedQty,
             side: side,
             type: type
         }
