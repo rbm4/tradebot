@@ -64,7 +64,17 @@ class Binance {
             return response.data
         })
     }
-
+    placeAlgoLimitOrder(ticker,side,type,price,amount,stopPrice){
+        if (type == "STOP_LOSS_LIMIT"){
+            return this.client.newOrder(ticker,side,type, {
+                price: price,
+                quantity: amount,
+                timeInForce: 'GTC',
+                stopPrice: stopPrice
+            }).then(response => {return response.data})
+            .catch(error => this.client.logger.error(error))
+        }
+    }
     placeOrder(ticker,side,type,price,amount){
         if (type == "LIMIT"){
             return this.client.newOrder(ticker, side, type, {
@@ -83,7 +93,7 @@ class Binance {
 
         
     }
-
+    
     async call(url) {
 
         let config = {
