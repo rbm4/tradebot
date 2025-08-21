@@ -1,0 +1,46 @@
+# Environment-specific configuration for Production
+spring:
+  application:
+    name: rbm
+  
+  # Production Database Configuration
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/tradebot_prod_db}
+    username: ${DATABASE_USERNAME:tradebot_prod_user}
+    password: ${DATABASE_PASSWORD:your_secure_password_here}
+    driver-class-name: org.postgresql.Driver
+    
+  # JPA Configuration for Production
+  jpa:
+    hibernate:
+      ddl-auto: validate  # Only validate schema in production
+    show-sql: false
+    format-sql: false
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+# Production logging configuration
+logging:
+  level:
+    com.tradebot.rbm: INFO
+    org.hibernate.SQL: WARN
+    org.springframework.transaction: WARN
+  pattern:
+    file: '%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n'
+  file:
+    name: /var/log/tradebot/tradebot.log
+
+# Production server configuration
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /tradebot-api
+
+# Production-specific settings
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics  # Limited endpoints in production
+  endpoint:
+    health:
+      show-details: when-authorized

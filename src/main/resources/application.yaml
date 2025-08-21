@@ -1,0 +1,54 @@
+spring:
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update  # Options: create, create-drop, update, validate, none
+    show-sql: true
+    format-sql: true
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: true
+        
+  # Connection Pool Configuration (HikariCP - default in Spring Boot)
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      connection-timeout: 20000
+      leak-detection-threshold: 60000
+binance:
+  secret: ${BINANCE_SECRET}
+  key: ${BINANCE_KEY}
+# Logging Configuration
+logging:
+  level:
+    com.tradebot.rbm: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.transaction: DEBUG
+  pattern:
+    console: '%d{dd-MM-yyyy HH:mm:ss} - %msg%n'
+    file: '%d{dd-MM-yyyy HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n'
+  file:
+    name: logs/tradebot.log
+
+# Server Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /tradebot-api
+
+# Management endpoints (for monitoring)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
