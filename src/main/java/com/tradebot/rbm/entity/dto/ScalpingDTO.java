@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 
 import com.binance.connector.client.spot.rest.model.GetAccountResponse;
 import com.binance.connector.client.spot.rest.model.GetOpenOrdersResponse;
+import com.binance.connector.client.spot.rest.model.TickerBookTickerResponse1;
 import com.tradebot.rbm.utils.dto.LiquidityAnalysis;
 import com.tradebot.rbm.utils.dto.MarketMomentum;
 import com.tradebot.rbm.utils.dto.ScalpingDecision;
@@ -42,6 +43,7 @@ public class ScalpingDTO {
     private TickerDto tickerInfo1h;
     private TickerDto tickerInfo6h;
     private TickerDto tickerInfo24h;
+    private TickerBookTickerResponse1 tickerBook;
 
     // Account and order information
     private GetAccountResponse accountInfo;

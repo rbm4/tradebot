@@ -3,12 +3,14 @@ package com.tradebot.rbm.adapter;
 import org.springframework.stereotype.Component;
 
 import com.binance.connector.client.SpotClient;
+import com.binance.connector.client.common.ApiResponse;
 import com.binance.connector.client.spot.rest.api.SpotRestApi;
 import com.binance.connector.client.spot.rest.model.GetAccountResponse;
 import com.binance.connector.client.spot.rest.model.GetOpenOrdersResponse;
 import com.binance.connector.client.spot.rest.model.NewOrderRequest;
 import com.binance.connector.client.spot.rest.model.NewOrderResponse;
 import com.binance.connector.client.spot.rest.model.Symbols;
+import com.binance.connector.client.spot.rest.model.TickerBookTickerResponse;
 import com.binance.connector.client.spot.rest.model.TickerType;
 import com.binance.connector.client.spot.rest.model.WindowSize;
 import com.tradebot.rbm.entity.dto.PlaceOrderDto;
@@ -37,8 +39,8 @@ public class BinanceAdapter {
             log.error("Failed to retrieve ticker information for {}", symbol);
             throw new RuntimeException("FAILED: Unable to get proper ticker info");
         }
-        var book = spotRestApi.tickerBookTicker(symbol, null);
-        return new TickerDto(ticker.getData().getTickerResponse1(), book.getData().getTickerBookTickerResponse1());
+
+        return new TickerDto(ticker.getData().getTickerResponse1());
     }
 
     public GetAccountResponse accountInfo() {
@@ -64,5 +66,9 @@ public class BinanceAdapter {
         req.setPrice(order.getPrice());
         var response = spotRestApi.newOrder(req);
         return response.getData();
+    }
+
+    public ApiResponse<TickerBookTickerResponse> tickerBookTicker(String symbol) {
+        return spotRestApi.tickerBookTicker(symbol, null);
     }
 }

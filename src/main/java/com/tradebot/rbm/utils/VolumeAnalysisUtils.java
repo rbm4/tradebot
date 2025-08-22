@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 
 import org.springframework.stereotype.Component;
 
+import com.binance.connector.client.spot.rest.model.TickerBookTickerResponse1;
 import com.tradebot.rbm.entity.dto.TickerDto;
 import com.tradebot.rbm.utils.dto.LiquidityAnalysis;
 import com.tradebot.rbm.utils.dto.LiquidityAnalysis.LiquidityLevel;
@@ -31,8 +32,11 @@ public class VolumeAnalysisUtils {
 
     /**
      * Analyzes volume patterns between different timeframes
+     * 
+     * @param tickerBookTickerResponse1
      */
-    public VolumeAnalysis analyzeVolume(TickerDto ticker6h, TickerDto ticker1h, TickerDto ticker24h) {
+    public VolumeAnalysis analyzeVolume(TickerDto ticker6h, TickerDto ticker1h, TickerDto ticker24h,
+            TickerBookTickerResponse1 book) {
         try {
             // Extract volume data
             BigDecimal volume6h = new BigDecimal(ticker6h.getTicker().getVolume());
@@ -49,8 +53,8 @@ public class VolumeAnalysisUtils {
             BigDecimal priceChange1h = new BigDecimal(ticker1h.getTicker().getPriceChangePercent());
 
             // Bid-ask spread
-            BigDecimal bidPrice = new BigDecimal(ticker6h.getBookTicker().getBidPrice());
-            BigDecimal askPrice = new BigDecimal(ticker6h.getBookTicker().getAskPrice());
+            BigDecimal bidPrice = new BigDecimal(book.getBidPrice());
+            BigDecimal askPrice = new BigDecimal(book.getAskPrice());
             BigDecimal spread = askPrice.subtract(bidPrice);
 
             // Analysis
@@ -245,12 +249,12 @@ public class VolumeAnalysisUtils {
     /**
      * Analyzes liquidity for scalping suitability
      */
-    public LiquidityAnalysis analyzeLiquidity(TickerDto ticker) {
+    public LiquidityAnalysis analyzeLiquidity(TickerDto ticker, TickerBookTickerResponse1 book) {
         try {
             BigDecimal quoteVolume24h = new BigDecimal(ticker.getTicker().getQuoteVolume());
             BigDecimal totalTrades = new BigDecimal(ticker.getTicker().getCount());
-            BigDecimal bidPrice = new BigDecimal(ticker.getBookTicker().getBidPrice());
-            BigDecimal askPrice = new BigDecimal(ticker.getBookTicker().getAskPrice());
+            BigDecimal bidPrice = new BigDecimal(book.getBidPrice());
+            BigDecimal askPrice = new BigDecimal(book.getAskPrice());
 
             // Calculate metrics
             BigDecimal avgTradeSize = quoteVolume24h.divide(totalTrades, 8, RoundingMode.HALF_UP);

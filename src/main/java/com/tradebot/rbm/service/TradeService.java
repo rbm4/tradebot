@@ -63,11 +63,13 @@ public class TradeService {
             TickerDto tickerInfo6h = spotService.ticker(symbol, WindowSize.WINDOW_SIZE_6h);
             TickerDto tickerInfo1h = spotService.ticker(symbol, WindowSize.WINDOW_SIZE_1h);
             TickerDto tickerInfo24h = spotService.ticker(symbol, WindowSize.WINDOW_SIZE_1d);
+            var book = spotService.getBookTicker(symbol);
 
             // Step 3: Check existing open orders
             GetOpenOrdersResponse openOrders = orderService.getOpenOrders(symbol);
             var scalpingDTO = ScalpingDTO.builder()
                     .symbol(symbol)
+                    .tickerBook(book)
                     .tickerInfo1h(tickerInfo1h)
                     .tickerInfo24h(tickerInfo24h)
                     .tickerInfo6h(tickerInfo6h)
@@ -92,9 +94,9 @@ public class TradeService {
         String quoteAsset = extractQuoteAsset(scalpingDTO.getSymbol()); // e.g., "USDT" from "BTCUSDT"
 
         // Get current market price
-        BigDecimal currentPrice = new BigDecimal(scalpingDTO.getTickerInfo1h().getBookTicker().getBidPrice());
-        BigDecimal askPrice = new BigDecimal(scalpingDTO.getTickerInfo1h().getBookTicker().getAskPrice());
-        BigDecimal bidPrice = new BigDecimal(scalpingDTO.getTickerInfo1h().getBookTicker().getBidPrice());
+        BigDecimal currentPrice = new BigDecimal(scalpingDTO.getTickerBook().getBidPrice());
+        BigDecimal askPrice = new BigDecimal(scalpingDTO.getTickerBook().getAskPrice());
+        BigDecimal bidPrice = new BigDecimal(scalpingDTO.getTickerBook().getBidPrice());
 
         log.info("Current market - Bid: {}, Ask: {}, Symbol: {}", bidPrice, askPrice, scalpingDTO.getSymbol());
 
@@ -139,7 +141,7 @@ public class TradeService {
         if (quoteBalance.compareTo(MIN_TRADE_AMOUNT_USDT) < 0) {
             log.info("Insufficient balance for trading. Available: {}, Required: {}",
                     quoteBalance, MIN_TRADE_AMOUNT_USDT);
-            return false;
+            // return false;
         }
         var ticker1h = scalpingDTO.getTickerInfo1h();
         var ticker6h = scalpingDTO.getTickerInfo6h();
@@ -160,8 +162,9 @@ public class TradeService {
 
         // Additional checks
         // Comprehensive analysis
-        VolumeAnalysis volumeAnalysis = volumeUtils.analyzeVolume(ticker6h, ticker1h, ticker24h);
-        LiquidityAnalysis liquidityAnalysis = volumeUtils.analyzeLiquidity(ticker24h);
+        VolumeAnalysis volumeAnalysis = volumeUtils.analyzeVolume(ticker6h, ticker1h, ticker24h,
+                scalpingDTO.getTickerBook());
+        LiquidityAnalysis liquidityAnalysis = volumeUtils.analyzeLiquidity(ticker24h, scalpingDTO.getTickerBook());
         MarketMomentum momentum = volumeUtils.analyzeMomentum(ticker1h, ticker6h, ticker24h);
 
         // TODO: Add volume-based filters
@@ -308,6 +311,8 @@ public class TradeService {
             return symbol.substring(0, symbol.length() - 3);
         } else if (symbol.endsWith("ETH")) {
             return symbol.substring(0, symbol.length() - 3);
+        } else if (symbol.endsWith("BNB")) {
+            return symbol.substring(0, symbol.length() - 3);
         }
         return symbol.substring(0, symbol.length() / 2); // Fallback
     }
@@ -325,6 +330,8 @@ public class TradeService {
             return "ETH";
         } else if (symbol.endsWith("BRL")) {
             return "BRL";
+        } else if (symbol.endsWith("FDUSD")) {
+            return "FDUSD";
         }
         return "USDT"; // Default fallback
     }
