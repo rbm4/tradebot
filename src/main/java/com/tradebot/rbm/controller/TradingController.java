@@ -28,11 +28,11 @@ public class TradingController {
      * @param symbol Trading pair symbol (e.g., "BTCUSDT")
      * @return Trading result
      */
-    @PostMapping("/execute/{symbol}")
-    public ResponseEntity<String> executeTrade(@PathVariable String symbol) {
+    @PostMapping("/execute/{base}/quote/{quote}")
+    public ResponseEntity<String> executeTrade(@PathVariable String base, @PathVariable String quote) {
         try {
-            log.info("Executing trade for symbol: {}", symbol);
-            String result = tradeService.trade(symbol);
+            log.info("Executing trade for symbol: {}{}", base, quote);
+            String result = tradeService.trade(base, quote);
 
             if (result.startsWith("ERROR") || result.startsWith("FAILED")) {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
@@ -40,7 +40,7 @@ public class TradingController {
 
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            log.error("Error executing trade for {}: {}", symbol, e.getMessage(), e);
+            log.error("Error executing trade for {}: {}", base + quote, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("TRADE_EXECUTION_ERROR: " + e.getMessage());
         }

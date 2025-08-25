@@ -36,7 +36,7 @@ public class TradeService {
 
     // Trading configuration - could be moved to application.yaml later
     private static final BigDecimal PROFIT_MARGIN_PERCENTAGE = new BigDecimal("0.3"); // 0.3%
-    private static final BigDecimal MIN_TRADE_AMOUNT_USDT = new BigDecimal("10.0"); // Minimum $10 USDT trade
+    private static final BigDecimal MIN_TRADE_AMOUNT_USDT = new BigDecimal("5.0"); // Minimum currency trade
     private static final BigDecimal MAX_TRADE_PERCENTAGE = new BigDecimal("20.0"); // Max 20% of available balance
     private static final BigDecimal PRICE_DROP_THRESHOLD = new BigDecimal("1.0"); // 1% price drop to trigger buy
     private static final int QUANTITY_PRECISION = 6; // Decimal places for quantity
@@ -48,7 +48,8 @@ public class TradeService {
      * @param symbol Trading pair symbol (e.g., "BTCUSDT")
      * @return Trading result status
      */
-    public String trade(String symbol) {
+    public String trade(String base, String quote) {
+        String symbol = base + quote;
         try {
             log.info("Starting trade analysis for symbol: {}", symbol);
 
@@ -60,19 +61,21 @@ public class TradeService {
             }
 
             // Step 2: Get market ticker information
-            TickerDto tickerInfo6h = spotService.ticker(symbol, WindowSize.WINDOW_SIZE_6h);
-            TickerDto tickerInfo1h = spotService.ticker(symbol, WindowSize.WINDOW_SIZE_1h);
-            TickerDto tickerInfo24h = spotService.ticker(symbol, WindowSize.WINDOW_SIZE_1d);
+            TickerDto shortTerm = spotService.ticker(symbol, WindowSize.WINDOW_SIZE_1m);
+            TickerDto midTerm = spotService.ticker(symbol, WindowSize.WINDOW_SIZE_3m);
+            TickerDto longTerm = spotService.ticker(symbol, WindowSize.WINDOW_SIZE_5m);
             var book = spotService.getBookTicker(symbol);
 
             // Step 3: Check existing open orders
             GetOpenOrdersResponse openOrders = orderService.getOpenOrders(symbol);
             var scalpingDTO = ScalpingDTO.builder()
                     .symbol(symbol)
+                    .baseAsset(base)
+                    .quoteAsset(quote)
                     .tickerBook(book)
-                    .tickerInfo1h(tickerInfo1h)
-                    .tickerInfo24h(tickerInfo24h)
-                    .tickerInfo6h(tickerInfo6h)
+                    .shortTermTicker(shortTerm)
+                    .midTermTicker(midTerm)
+                    .longTermTicker(longTerm)
                     .accountInfo(accountInfo)
                     .openOrders(openOrders)
                     .build();
@@ -90,8 +93,8 @@ public class TradeService {
      */
     private String executeScalpingStrategy(ScalpingDTO scalpingDTO) {
         log.info("---------------------------- Starting scalping ----------------------------");
-        String baseAsset = extractBaseAsset(scalpingDTO.getSymbol()); // e.g., "BTC" from "BTCUSDT"
-        String quoteAsset = extractQuoteAsset(scalpingDTO.getSymbol()); // e.g., "USDT" from "BTCUSDT"
+        String baseAsset = scalpingDTO.getBaseAsset();
+        String quoteAsset = scalpingDTO.getQuoteAsset();
 
         // Get current market price
         BigDecimal currentPrice = new BigDecimal(scalpingDTO.getTickerBook().getBidPrice());
@@ -121,12 +124,12 @@ public class TradeService {
 
         // Check if we should place a buy order
         if (shouldPlaceBuyOrder(scalpingDTO, quoteBalance)) {
-            // return placeBuyOrder(scalpingDTO.getSymbol(), currentPrice, quoteBalance);
+            placeBuyOrder(scalpingDTO.getSymbol(), currentPrice, quoteBalance);
         }
 
         // Check if we should place a sell order (if we have base asset)
         if (baseBalance.compareTo(BigDecimal.ZERO) > 0) {
-            return placeSellOrder(scalpingDTO.getSymbol(), currentPrice, baseBalance);
+            placeSellOrder(scalpingDTO.getSymbol(), currentPrice, baseBalance);
         }
 
         log.info("No trading action taken for {}", scalpingDTO.getSymbol());
@@ -141,14 +144,14 @@ public class TradeService {
         if (quoteBalance.compareTo(MIN_TRADE_AMOUNT_USDT) < 0) {
             log.info("Insufficient balance for trading. Available: {}, Required: {}",
                     quoteBalance, MIN_TRADE_AMOUNT_USDT);
-            // return false;
+            return false;
         }
-        var ticker1h = scalpingDTO.getTickerInfo1h();
-        var ticker6h = scalpingDTO.getTickerInfo6h();
-        var ticker24h = scalpingDTO.getTickerInfo24h();
+        var shortTerm = scalpingDTO.getShortTermTicker();
+        var midTerm = scalpingDTO.getMidTermTicker();
+        var longTerm = scalpingDTO.getLongTermTicker();
 
         // Get price change percentage
-        BigDecimal priceChangePercent = new BigDecimal(ticker6h.getTicker().getPriceChangePercent());
+        BigDecimal priceChangePercent = new BigDecimal(midTerm.getTicker().getPriceChangePercent());
         log.info("Price change percent: {}%", priceChangePercent);
 
         // TODO: Implement more sophisticated market analysis
@@ -158,20 +161,21 @@ public class TradeService {
         // - Support/resistance levels
 
         // Simple strategy: Buy if price increased during ticker window
-        boolean shouldBuy = priceChangePercent.compareTo(PRICE_DROP_THRESHOLD.negate()) == 1;
+        // boolean shouldBuy =
+        // priceChangePercent.compareTo(PRICE_DROP_THRESHOLD.negate()) == 1;
 
         // Additional checks
         // Comprehensive analysis
-        VolumeAnalysis volumeAnalysis = volumeUtils.analyzeVolume(ticker6h, ticker1h, ticker24h,
+        VolumeAnalysis volumeAnalysis = volumeUtils.analyzeVolume(shortTerm, midTerm, longTerm,
                 scalpingDTO.getTickerBook());
-        LiquidityAnalysis liquidityAnalysis = volumeUtils.analyzeLiquidity(ticker24h, scalpingDTO.getTickerBook());
-        MarketMomentum momentum = volumeUtils.analyzeMomentum(ticker1h, ticker6h, ticker24h);
+        LiquidityAnalysis liquidityAnalysis = volumeUtils.analyzeLiquidity(longTerm, scalpingDTO.getTickerBook());
+        MarketMomentum momentum = volumeUtils.analyzeMomentum(shortTerm, midTerm, longTerm);
 
         // TODO: Add volume-based filters
         // boolean volumeCheck = volume.compareTo(avgVolume.multiply(new
         // BigDecimal("0.8"))) > 0;
 
-        log.info("Buy signal analysis - Price variance: {}%, Should buy: {}", priceChangePercent, shouldBuy);
+        log.info("Buy signal analysis - Price variance: {}%", priceChangePercent);
 
         // Get final decision
         ScalpingDecision decision = volumeUtils.makeScalpingDecision(volumeAnalysis, momentum, liquidityAnalysis);
@@ -198,19 +202,19 @@ public class TradeService {
             }
 
             // Calculate quantity to buy
-            BigDecimal quantity = tradeAmount.divide(currentPrice, QUANTITY_PRECISION, RoundingMode.DOWN);
+            BigDecimal quantity = tradeAmount.divide(currentPrice, QUANTITY_PRECISION, RoundingMode.UP);
 
             log.info("Placing BUY order - Symbol: {}, Quantity: {}, Price: {}, Total: {}",
                     symbol, quantity, currentPrice, tradeAmount);
 
-            PlaceOrderDto buyOrder = new PlaceOrderDto(
-                    symbol,
-                    Side.BUY.getValue(),
-                    OrderType.MARKET.getValue(), // Using market order for immediate execution
-                    currentPrice.doubleValue(),
-                    quantity.doubleValue());
+            // PlaceOrderDto buyOrder = new PlaceOrderDto(
+            // symbol,
+            // Side.BUY.getValue(),
+            // OrderType.MARKET.getValue(), // Using market order for immediate execution
+            // currentPrice.doubleValue(),
+            // quantity.doubleValue());
 
-            orderService.placeOrder(buyOrder);
+            // orderService.placeOrder(buyOrder);
 
             log.info("BUY order placed successfully for {}", symbol);
             return "BUY_ORDER_PLACED: " + quantity + " " + symbol + " at " + currentPrice;
@@ -241,7 +245,7 @@ public class TradeService {
                     sellPrice.doubleValue(),
                     availableQuantity.doubleValue());
 
-            orderService.placeOrder(sellOrder);
+            // orderService.placeOrder(sellOrder);
 
             log.info("SELL order placed successfully for {}", symbol);
             return "SELL_ORDER_PLACED: " + availableQuantity + " " + symbol + " at " + sellPrice;
@@ -297,43 +301,6 @@ public class TradeService {
                 .findFirst()
                 .map(balance -> new BigDecimal(balance.getFree()))
                 .orElse(BigDecimal.ZERO);
-    }
-
-    /**
-     * Extracts base asset from trading pair (e.g., "BTC" from "BTCUSDT")
-     */
-    private String extractBaseAsset(String symbol) {
-        // TODO: Implement proper symbol parsing
-        // This is a simplified version - should be more robust
-        if (symbol.endsWith("USDT")) {
-            return symbol.substring(0, symbol.length() - 4);
-        } else if (symbol.endsWith("BTC")) {
-            return symbol.substring(0, symbol.length() - 3);
-        } else if (symbol.endsWith("ETH")) {
-            return symbol.substring(0, symbol.length() - 3);
-        } else if (symbol.endsWith("BNB")) {
-            return symbol.substring(0, symbol.length() - 3);
-        }
-        return symbol.substring(0, symbol.length() / 2); // Fallback
-    }
-
-    /**
-     * Extracts quote asset from trading pair (e.g., "USDT" from "BTCUSDT")
-     */
-    private String extractQuoteAsset(String symbol) {
-        // TODO: Implement proper symbol parsing
-        if (symbol.endsWith("USDT")) {
-            return "USDT";
-        } else if (symbol.endsWith("BTC")) {
-            return "BTC";
-        } else if (symbol.endsWith("ETH")) {
-            return "ETH";
-        } else if (symbol.endsWith("BRL")) {
-            return "BRL";
-        } else if (symbol.endsWith("FDUSD")) {
-            return "FDUSD";
-        }
-        return "USDT"; // Default fallback
     }
 
     /**

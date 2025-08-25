@@ -27,8 +27,8 @@ public class VolumeAnalysisUtils {
     private static final BigDecimal HIGH_VOLUME_THRESHOLD = new BigDecimal("1.2"); // 120% of average
     private static final BigDecimal LOW_VOLUME_THRESHOLD = new BigDecimal("0.7"); // 70% of average
     private static final BigDecimal MAX_SPREAD_PERCENTAGE = new BigDecimal("0.1"); // 0.1% max spread
-    private static final BigDecimal STRONG_PRICE_CHANGE = new BigDecimal("2.0"); // 2% price change
-    private static final BigDecimal MODERATE_PRICE_CHANGE = new BigDecimal("0.5"); // 0.5% price change
+    private static final BigDecimal STRONG_PRICE_CHANGE = new BigDecimal("1.0"); // 1% price change
+    private static final BigDecimal MODERATE_PRICE_CHANGE = new BigDecimal("0.4"); // 0.4% price change
 
     /**
      * Analyzes volume patterns between different timeframes

@@ -1,7 +1,6 @@
 package com.tradebot.rbm.config;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -27,6 +26,14 @@ public class BinanceConfig {
     @Bean
     public SpotRestApi binanceSpotRestClient() {
         return new SpotRestApi(getConfig());
+    }
+
+    @Bean
+    public SignatureConfiguration signatureConfiguration() {
+        SignatureConfiguration signatureConfiguration = new SignatureConfiguration();
+        signatureConfiguration.setApiKey(key);
+        signatureConfiguration.setSecretKey(secret);
+        return signatureConfiguration;
     }
 
     public ClientConfiguration getConfig() {

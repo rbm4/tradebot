@@ -24,6 +24,8 @@ spring:
 binance:
   secret: ${BINANCE_SECRET}
   key: ${BINANCE_KEY}
+  trading:
+    symbol: bnbfdusd  # Default trading symbol, can be changed to any valid Binance symbol
 # Logging Configuration
 logging:
   level:

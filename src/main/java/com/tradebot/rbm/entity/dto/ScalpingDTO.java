@@ -40,9 +40,9 @@ public class ScalpingDTO {
     private BigDecimal availableTradeAmount;
 
     // Ticker information for different timeframes
-    private TickerDto tickerInfo1h;
-    private TickerDto tickerInfo6h;
-    private TickerDto tickerInfo24h;
+    private TickerDto shortTermTicker;
+    private TickerDto midTermTicker;
+    private TickerDto longTermTicker;
     private TickerBookTickerResponse1 tickerBook;
 
     // Account and order information
