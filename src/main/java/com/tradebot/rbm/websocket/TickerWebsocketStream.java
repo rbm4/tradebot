@@ -13,6 +13,7 @@ import com.binance.connector.client.common.websocket.service.StreamBlockingQueue
 import com.binance.connector.client.spot.websocket.stream.api.SpotWebSocketStreams;
 import com.binance.connector.client.spot.websocket.stream.model.BookTickerRequest;
 import com.binance.connector.client.spot.websocket.stream.model.BookTickerResponse;
+import com.tradebot.rbm.service.WebsocketTradeService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,8 @@ public class TickerWebsocketStream implements ApplicationRunner {
 
     @Value("${binance.trading.symbol:BTCUSDT}")
     private String tradingSymbol;
+
+    private final WebsocketTradeService websocketTradeService;
 
     public final static AtomicBoolean shouldListenToTrades = new AtomicBoolean(true);
     private final SpotWebSocketStreams spotWebSocketStreams;
@@ -48,7 +51,7 @@ public class TickerWebsocketStream implements ApplicationRunner {
         bookTickerRequest.symbol(tradingSymbol);
         StreamBlockingQueueWrapper<BookTickerResponse> response = spotWebSocketStreams.bookTicker(bookTickerRequest);
         while (shouldListenToTrades.get()) {
-            System.out.println(response.take());
+            websocketTradeService.updateTicker(response.take());
         }
     }
 

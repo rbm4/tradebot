@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.tradebot.rbm.entity.dto.StreamStatusDTO;
 import com.tradebot.rbm.websocket.AccountListenerWebsocketStream;
 import com.tradebot.rbm.websocket.TickerWebsocketStream;
 import com.tradebot.rbm.websocket.TradeWebsocketStream;
@@ -53,7 +54,7 @@ public class WebSocketControlController {
     }
 
     /**
-     * Control both streams at once
+     * Control all streams at once
      * POST /api/websocket/all?enabled=true/false
      */
     @PostMapping("/all")
@@ -91,11 +92,12 @@ public class WebSocketControlController {
      * GET /api/websocket/status
      */
     @GetMapping("/status")
-    public ResponseEntity<StreamStatus> getStreamStatus() {
-        StreamStatus status = StreamStatus.builder()
+    public ResponseEntity<StreamStatusDTO> getStreamStatus() {
+        StreamStatusDTO status = StreamStatusDTO.builder()
                 .tradeStreamEnabled(TradeWebsocketStream.shouldListenToTrades.get())
                 .tickerStreamEnabled(TickerWebsocketStream.shouldListenToTrades.get())
                 .accountStreamEnabled(AccountListenerWebsocketStream.shouldListenToAccount.get())
+                .accountStatusResponse(AccountListenerWebsocketStream.accountStatus)
                 .build();
 
         return ResponseEntity.ok(status);
@@ -155,74 +157,4 @@ public class WebSocketControlController {
         return controlAccountStream(false);
     }
 
-    /**
-     * Response DTO for stream status
-     */
-    public static class StreamStatus {
-        private boolean tradeStreamEnabled;
-        private boolean tickerStreamEnabled;
-        private boolean accountStreamEnabled;
-
-        public StreamStatus() {
-        }
-
-        public StreamStatus(boolean tradeStreamEnabled, boolean tickerStreamEnabled, boolean accountStreamEnabled) {
-            this.tradeStreamEnabled = tradeStreamEnabled;
-            this.tickerStreamEnabled = tickerStreamEnabled;
-            this.accountStreamEnabled = accountStreamEnabled;
-        }
-
-        public static StreamStatusBuilder builder() {
-            return new StreamStatusBuilder();
-        }
-
-        public boolean isTradeStreamEnabled() {
-            return tradeStreamEnabled;
-        }
-
-        public void setTradeStreamEnabled(boolean tradeStreamEnabled) {
-            this.tradeStreamEnabled = tradeStreamEnabled;
-        }
-
-        public boolean isTickerStreamEnabled() {
-            return tickerStreamEnabled;
-        }
-
-        public void setTickerStreamEnabled(boolean tickerStreamEnabled) {
-            this.tickerStreamEnabled = tickerStreamEnabled;
-        }
-
-        public boolean isAccountStreamEnabled() {
-            return accountStreamEnabled;
-        }
-
-        public void setAccountStreamEnabled(boolean accountStreamEnabled) {
-            this.accountStreamEnabled = accountStreamEnabled;
-        }
-
-        public static class StreamStatusBuilder {
-            private boolean tradeStreamEnabled;
-            private boolean tickerStreamEnabled;
-            private boolean accountStreamEnabled;
-
-            public StreamStatusBuilder tradeStreamEnabled(boolean tradeStreamEnabled) {
-                this.tradeStreamEnabled = tradeStreamEnabled;
-                return this;
-            }
-
-            public StreamStatusBuilder tickerStreamEnabled(boolean tickerStreamEnabled) {
-                this.tickerStreamEnabled = tickerStreamEnabled;
-                return this;
-            }
-
-            public StreamStatusBuilder accountStreamEnabled(boolean accountStreamEnabled) {
-                this.accountStreamEnabled = accountStreamEnabled;
-                return this;
-            }
-
-            public StreamStatus build() {
-                return new StreamStatus(tradeStreamEnabled, tickerStreamEnabled, accountStreamEnabled);
-            }
-        }
-    }
 }

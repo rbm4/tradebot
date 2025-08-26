@@ -42,4 +42,5 @@ public class BinanceWebsocketComponent {
 
         return webSocketApiClient;
     }
+
 }

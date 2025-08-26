@@ -17,6 +17,7 @@ import com.binance.connector.client.common.websocket.service.StreamBlockingQueue
 import com.binance.connector.client.spot.websocket.stream.api.SpotWebSocketStreams;
 import com.binance.connector.client.spot.websocket.stream.model.TradeRequest;
 import com.binance.connector.client.spot.websocket.stream.model.TradeResponse;
+import com.tradebot.rbm.service.WebsocketTradeService;
 import com.tradebot.rbm.utils.DoubleLimitExample;
 
 import lombok.RequiredArgsConstructor;
@@ -30,8 +31,9 @@ public class TradeWebsocketStream implements ApplicationRunner {
     @Value("${binance.trading.symbol:BTCUSDT}")
     private String tradingSymbol;
 
-    public final static AtomicBoolean shouldListenToTrades = new AtomicBoolean(false);
+    public final static AtomicBoolean shouldListenToTrades = new AtomicBoolean(true);
     private final SpotWebSocketStreams spotWebSocketStreams;
+    private final WebsocketTradeService websocketTradeService;
 
     @Override
     @Async
@@ -60,12 +62,14 @@ public class TradeWebsocketStream implements ApplicationRunner {
             var valor = Double.valueOf(tickerData.getpLowerCase()) * Double.valueOf(tickerData.getqLowerCase());
             valor = DoubleLimitExample.limitDecimal(valor, 2);
 
-            log.info("Trade: {} at {} | Qtd: {} | Valor: ${} | Time: {}",
-                    tradingSymbol.toUpperCase(),
-                    DoubleLimitExample.limitDecimal(Double.valueOf(tickerData.getpLowerCase()), 2),
-                    tickerData.getqLowerCase(),
-                    valor,
-                    formattedTime);
+            // log.info("Trade: {} at {} | Qtd: {} | Valor: ${} | Time: {}",
+            // tradingSymbol.toUpperCase(),
+            // DoubleLimitExample.limitDecimal(Double.valueOf(tickerData.getpLowerCase()),
+            // 2),
+            // tickerData.getqLowerCase(),
+            // valor,
+            // formattedTime);
+            websocketTradeService.updateTrade(tickerData);
         }
     }
 }

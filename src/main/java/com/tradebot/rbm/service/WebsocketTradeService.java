@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import com.binance.connector.client.spot.websocket.stream.model.BookTickerResponse;
 import com.binance.connector.client.spot.websocket.stream.model.TradeResponse;
+import com.tradebot.rbm.utils.dto.PendingBuyOrderDTO;
 import com.tradebot.rbm.websocket.AccountListenerWebsocketStream;
 import com.tradebot.rbm.websocket.dto.AccountStatusResponse;
 
@@ -30,9 +31,9 @@ public class WebsocketTradeService {
 
     // Scalping configuration
     private static final BigDecimal MIN_SPREAD_THRESHOLD = new BigDecimal("0.0001"); // Minimum spread to consider
-    private static final BigDecimal SCALP_MARGIN = new BigDecimal("0.0005"); // 0.05% margin for scalping
-    private static final BigDecimal MIN_TRADE_AMOUNT = new BigDecimal("10.0"); // Minimum trade amount in USDT
-    private static final BigDecimal MAX_POSITION_PERCENTAGE = new BigDecimal("0.1"); // Max 10% of balance per trade
+    private static final BigDecimal SCALP_MARGIN = new BigDecimal("0.02"); // 0.05% margin for scalping
+    private static final BigDecimal MIN_TRADE_AMOUNT = new BigDecimal("5.0"); // Minimum trade amount in USDT
+    private static final BigDecimal MAX_POSITION_PERCENTAGE = new BigDecimal("1"); // Max 100% of balance per trade
     private static final int MAX_RECENT_TRADES = 50; // Keep last 50 trades for analysis
     private static final long TRADE_ANALYSIS_WINDOW_SECONDS = 30; // Analyze trades from last 30 seconds
 
@@ -41,8 +42,12 @@ public class WebsocketTradeService {
     private final AtomicReference<TradeResponse> lastTrade = new AtomicReference<>();
     private final ConcurrentLinkedQueue<TradeData> recentTrades = new ConcurrentLinkedQueue<>();
 
+    // Order tracking
+    private final AtomicReference<PendingBuyOrderDTO> pendingBuyOrders = new AtomicReference<>();
+
     // Trading state
-    private volatile boolean isActivelyTrading = false;
+    private volatile boolean isActivelyTradingTicker = false;
+    private volatile boolean isActivelyTrading = true;
     private volatile LocalDateTime lastOrderTime = LocalDateTime.now().minus(1, ChronoUnit.MINUTES);
 
     /**
@@ -59,15 +64,22 @@ public class WebsocketTradeService {
     }
 
     /**
+     * Internal class to store pending buy order information
+     */
+
+    /**
      * Updates the current ticker data from TickerWebsocketStream
      */
     public void updateTicker(BookTickerResponse ticker) {
         currentTicker.set(ticker);
-        log.debug("Ticker updated - Bid: {}, Ask: {}, Symbol: {}, Bid qty: {}, Ask qty: {}",
-                ticker.getbLowerCase(), ticker.getaLowerCase(), ticker.getsLowerCase(), ticker.getB(), ticker.getA());
+        // TODO:
+        // log.debug("Ticker updated - Bid: {}, Ask: {}, Symbol: {}, Bid qty: {}, Ask
+        // qty: {}",
+        // ticker.getbLowerCase(), ticker.getaLowerCase(), ticker.getsLowerCase(),
+        // ticker.getB(), ticker.getA());
 
         // Trigger scalping analysis when ticker updates
-        if (isActivelyTrading) {
+        if (isActivelyTradingTicker) {
             analyzeScalpingOpportunity();
         }
     }
@@ -86,13 +98,30 @@ public class WebsocketTradeService {
             recentTrades.poll();
         }
 
-        log.debug("Trade updated - Price: {}, Quantity: {}, Time: {}",
-                trade.getpLowerCase(), trade.getqLowerCase(), trade.getT());
+        // Check if any pending buy orders might have been executed
+        checkPendingOrderExecutions(trade);
 
         // Trigger scalping analysis on new trade
         if (isActivelyTrading) {
             analyzeScalpingOpportunity();
         }
+    }
+
+    /**
+     * Checks if incoming trade data matches any pending buy orders
+     * This is a heuristic approach since we don't have direct order execution
+     * callbacks
+     */
+    private void checkPendingOrderExecutions(TradeResponse trade) {
+        BigDecimal tradePrice = new BigDecimal(trade.getpLowerCase());
+        BigDecimal tradeQuantity = new BigDecimal(trade.getqLowerCase());
+
+        // Check each pending order to see if it could have been executed
+        if (pendingBuyOrders.get() != null) {
+            var pendingOrder = pendingBuyOrders.get();
+
+        }
+        ;
     }
 
     /**
@@ -116,9 +145,9 @@ public class WebsocketTradeService {
      */
     private void analyzeScalpingOpportunity() {
         try {
-            BookTickerResponse ticker = currentTicker.get();
-            TradeResponse trade = lastTrade.get();
-            AccountStatusResponse accountStatus = AccountListenerWebsocketStream.accountStatus;
+            var ticker = currentTicker.get();
+            var trade = lastTrade.get();
+            var accountStatus = AccountListenerWebsocketStream.accountStatus;
 
             if (ticker == null || trade == null || accountStatus == null) {
                 log.debug("Missing data for scalping analysis - Ticker: {}, Trade: {}, Account: {}",
@@ -172,8 +201,6 @@ public class WebsocketTradeService {
 
         BigDecimal baseBalance = getAssetBalance(accountStatus, baseAsset);
         BigDecimal quoteBalance = getAssetBalance(accountStatus, quoteAsset);
-
-        log.debug("Account balances - {}: {}, {}: {}", baseAsset, baseBalance, quoteAsset, quoteBalance);
 
         // Determine scalping action
         ScalpingAction action = determineScalpingAction(momentum, bidPrice, askPrice, lastTradePrice,
@@ -239,8 +266,8 @@ public class WebsocketTradeService {
             BigDecimal quoteBalance, BigDecimal spread) {
 
         // Calculate potential order prices
-        BigDecimal buyOrderPrice = bidPrice.add(bidPrice.multiply(SCALP_MARGIN.negate())); // Slightly below bid
-        BigDecimal sellOrderPrice = askPrice.add(askPrice.multiply(SCALP_MARGIN)); // Slightly above ask
+        BigDecimal buyOrderPrice = bidPrice.add(SCALP_MARGIN.negate()); // Slightly below bid
+        BigDecimal sellOrderPrice = askPrice.add(SCALP_MARGIN); // Slightly above ask
 
         // Check if we have sufficient balance for buy order
         boolean canBuy = quoteBalance.compareTo(MIN_TRADE_AMOUNT) > 0;
@@ -257,14 +284,6 @@ public class WebsocketTradeService {
         if ("BEARISH".equals(momentum.direction) && canSell) {
             BigDecimal quantity = calculateOptimalQuantity(baseBalance, sellOrderPrice, false);
             return new ScalpingAction("SELL", sellOrderPrice, quantity, "Bearish momentum detected");
-        }
-
-        // Market making strategy - place both buy and sell orders
-        if ("NEUTRAL".equals(momentum.direction) && canBuy
-                && spread.compareTo(MIN_SPREAD_THRESHOLD.multiply(BigDecimal.valueOf(2))) > 0) {
-            BigDecimal buyQuantity = calculateOptimalQuantity(
-                    quoteBalance.divide(BigDecimal.valueOf(2), RoundingMode.DOWN), buyOrderPrice, true);
-            return new ScalpingAction("BUY", buyOrderPrice, buyQuantity, "Market making - neutral momentum");
         }
 
         return new ScalpingAction("NONE", BigDecimal.ZERO, BigDecimal.ZERO, "No favorable conditions");
@@ -299,23 +318,124 @@ public class WebsocketTradeService {
     }
 
     /**
-     * Executes a buy order
+     * Executes a buy order and prepares for follow-up sell order
      */
     private void executeBuyOrder(BigDecimal price, BigDecimal quantity) {
         log.info("Placing BUY order - Symbol: {}, Price: {}, Quantity: {}", tradingSymbol, price, quantity);
 
-        // TODO: Integrate with your OrderService to place actual order
-        // Example:
-        // PlaceOrderDto orderDto = new PlaceOrderDto();
-        // orderDto.setSymbol(tradingSymbol);
-        // orderDto.setSide(Side.BUY);
-        // orderDto.setType(OrderType.LIMIT);
-        // orderDto.setPrice(price);
-        // orderDto.setQuantity(quantity);
-        // orderDto.setTimeInForce(TimeInForce.GTC);
-        // orderService.placeOrder(orderDto);
+        try {
+            // Generate a unique order ID (you can replace this with actual order ID from
+            // your order service)
+            var orderId = "BUY_" + System.currentTimeMillis();
 
-        log.info("BUY order placed successfully");
+            // Calculate expected sell price with profit margin
+            var currentTickerData = currentTicker.get();
+
+            // Set sell price above current ask and with profit margin from buy price
+            var askBasedPrice = new BigDecimal(currentTickerData.getaLowerCase()).add(SCALP_MARGIN.negate());
+            var expectedSellPrice = price.max(askBasedPrice);
+
+            // Store the pending buy order
+            var pendingOrder = new PendingBuyOrderDTO(orderId, tradingSymbol, price, quantity,
+                    expectedSellPrice);
+            pendingBuyOrders.set(pendingOrder);
+
+            log.info("Buy order stored - ID: {}, Expected sell price: {}", orderId, expectedSellPrice);
+
+            // TODO: Integrate with your OrderService to place actual order
+            // Example:
+            // PlaceOrderDto orderDto = new PlaceOrderDto();
+            // orderDto.setSymbol(tradingSymbol);
+            // orderDto.setSide(Side.BUY);
+            // orderDto.setType(OrderType.LIMIT);
+            // orderDto.setPrice(price);
+            // orderDto.setQuantity(quantity);
+            // orderDto.setTimeInForce(TimeInForce.GTC);
+            // String actualOrderId = orderService.placeOrder(orderDto);
+            //
+            // // Update the stored order with actual order ID
+            // if (actualOrderId != null) {
+            // pendingBuyOrders.remove(orderId);
+            // pendingBuyOrders.put(actualOrderId, new PendingBuyOrder(actualOrderId,
+            // tradingSymbol, price, quantity, expectedSellPrice));
+            // }
+
+            log.info("BUY order placed successfully - Monitoring for execution");
+
+        } catch (Exception e) {
+            log.error("Error placing buy order", e);
+        }
+    }
+
+    /**
+     * Called when a buy order is executed - places corresponding sell order
+     */
+    public void onBuyOrderExecuted(String orderId, BigDecimal executedPrice, BigDecimal executedQuantity) {
+        var pendingOrder = pendingBuyOrders.get();
+
+        if (pendingOrder == null) {
+            log.warn("No pending buy order found for ID: {}", orderId);
+            return;
+        }
+
+        log.info("Buy order executed - ID: {}, Executed Price: {}, Quantity: {}",
+                orderId, executedPrice, executedQuantity);
+
+        try {
+            // Get current market data for optimal sell price positioning
+            BookTickerResponse currentTickerData = currentTicker.get();
+            BigDecimal currentAskPrice = currentTickerData != null ? new BigDecimal(currentTickerData.getaLowerCase())
+                    : executedPrice.add(SCALP_MARGIN);
+
+            // Calculate sell price considering:
+            // 1. Minimum profit margin from executed buy price
+            // 2. Position above current ask to avoid taking from the book
+            BigDecimal minProfitPrice = executedPrice.add(executedPrice.multiply(SCALP_MARGIN));
+            BigDecimal askBasedPrice = currentAskPrice.add(currentAskPrice.multiply(SCALP_MARGIN));
+            BigDecimal sellPrice = minProfitPrice.max(askBasedPrice);
+
+            // Place sell order
+            executeSellOrderForBuy(orderId, sellPrice, executedQuantity, executedPrice);
+
+            // Remove from pending orders
+            pendingBuyOrders.set(null);
+
+        } catch (Exception e) {
+            log.error("Error handling executed buy order: {}", orderId, e);
+        }
+    }
+
+    /**
+     * Places a sell order for a completed buy order
+     */
+    private void executeSellOrderForBuy(String buyOrderId, BigDecimal sellPrice, BigDecimal quantity,
+            BigDecimal buyPrice) {
+        log.info("Placing SELL order for completed buy - Buy Order ID: {}, Sell Price: {}, Quantity: {}, Buy Price: {}",
+                buyOrderId, sellPrice, quantity, buyPrice);
+
+        BigDecimal expectedProfit = sellPrice.subtract(buyPrice).multiply(quantity);
+        log.info("Expected profit from scalp: {} USDT", expectedProfit);
+
+        try {
+            // TODO: Integrate with your OrderService to place actual sell order
+            // Example:
+            // PlaceOrderDto sellOrderDto = new PlaceOrderDto();
+            // sellOrderDto.setSymbol(tradingSymbol);
+            // sellOrderDto.setSide(Side.SELL);
+            // sellOrderDto.setType(OrderType.LIMIT);
+            // sellOrderDto.setPrice(sellPrice);
+            // sellOrderDto.setQuantity(quantity);
+            // sellOrderDto.setTimeInForce(TimeInForce.GTC);
+            // String sellOrderId = orderService.placeOrder(sellOrderDto);
+            //
+            // log.info("SELL order placed - ID: {}, linked to buy order: {}", sellOrderId,
+            // buyOrderId);
+
+            log.info("SELL order placed successfully for buy order: {}", buyOrderId);
+
+        } catch (Exception e) {
+            log.error("Error placing sell order for buy order: {}", buyOrderId, e);
+        }
     }
 
     /**
@@ -361,12 +481,14 @@ public class WebsocketTradeService {
      */
     private String extractBaseAsset(String symbol) {
         // Simple logic - you might need to adjust based on your symbol format
-        if (symbol.endsWith("USDT")) {
-            return symbol.substring(0, symbol.length() - 4);
-        } else if (symbol.endsWith("BTC") || symbol.endsWith("ETH") || symbol.endsWith("BNB")) {
-            return symbol.substring(0, symbol.length() - 3);
+        var symbolCompare = symbol.toUpperCase();
+        if (symbolCompare.endsWith("FDUSD")) {
+            return symbolCompare.substring(0, symbolCompare.length() - 5);
+        } else if (symbolCompare.endsWith("BTC") || symbolCompare.endsWith("DGB") || symbolCompare.endsWith("ETH")
+                || symbolCompare.endsWith("BNB")) {
+            return symbolCompare.substring(0, symbolCompare.length() - 3);
         }
-        return symbol.substring(0, symbol.length() / 2); // Fallback
+        return symbolCompare.substring(0, symbolCompare.length() / 2); // Fallback
     }
 
     /**
@@ -374,16 +496,17 @@ public class WebsocketTradeService {
      */
     private String extractQuoteAsset(String symbol) {
         // Simple logic - you might need to adjust based on your symbol format
-        if (symbol.endsWith("USDT")) {
-            return "USDT";
-        } else if (symbol.endsWith("BTC")) {
+        var symbolCompare = symbol.toUpperCase();
+        if (symbolCompare.endsWith("FDUSD")) {
+            return "FDUSD";
+        } else if (symbolCompare.endsWith("BTC")) {
             return "BTC";
-        } else if (symbol.endsWith("ETH")) {
+        } else if (symbolCompare.endsWith("ETH")) {
             return "ETH";
-        } else if (symbol.endsWith("BNB")) {
+        } else if (symbolCompare.endsWith("BNB")) {
             return "BNB";
         }
-        return symbol.substring(symbol.length() / 2); // Fallback
+        return symbolCompare.substring(symbolCompare.length() / 2); // Fallback
     }
 
     /**
@@ -398,6 +521,27 @@ public class WebsocketTradeService {
      */
     public int getRecentTradesCount() {
         return recentTrades.size();
+    }
+
+    /**
+     * Gets information about pending orders for monitoring
+     */
+    public String getPendingOrdersInfo() {
+        if (pendingBuyOrders.get() == null) {
+            return "No pending buy orders";
+        }
+
+        StringBuilder info = new StringBuilder();
+
+        var order = pendingBuyOrders.get();
+        info.append("- Order ID: ").append(order.getOrderId())
+                .append(", Price: ").append(order.getBuyPrice())
+                .append(", Quantity: ").append(order.getQuantity())
+                .append(", Expected Sell: ").append(order.getExpectedProfitPrice())
+                .append(", Executed: ").append(order.isExecuted())
+                .append("\n");
+
+        return info.toString();
     }
 
     // Inner classes for analysis results
