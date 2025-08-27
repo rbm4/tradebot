@@ -12,6 +12,7 @@ import com.binance.connector.client.spot.rest.model.NewOrderResponse;
 import com.binance.connector.client.spot.rest.model.Symbols;
 import com.binance.connector.client.spot.rest.model.TickerBookTickerResponse;
 import com.binance.connector.client.spot.rest.model.TickerType;
+import com.binance.connector.client.spot.rest.model.TimeInForce;
 import com.binance.connector.client.spot.rest.model.WindowSize;
 import com.tradebot.rbm.entity.dto.PlaceOrderDto;
 import com.tradebot.rbm.entity.dto.TickerDto;
@@ -64,6 +65,8 @@ public class BinanceAdapter {
         req.setSide(order.getSide());
         req.setType(order.getType());
         req.setPrice(order.getPrice());
+        req.setQuantity(order.getAmount());
+        req.timeInForce(TimeInForce.GTC);
         var response = spotRestApi.newOrder(req);
         return response.getData();
     }

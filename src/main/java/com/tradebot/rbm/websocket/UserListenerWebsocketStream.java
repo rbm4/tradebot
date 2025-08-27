@@ -110,7 +110,7 @@ public class UserListenerWebsocketStream implements ApplicationRunner {
 
             JSONObject accountParams = new JSONObject();
             accountParams.put("requestId", "account_status_" + System.currentTimeMillis());
-            accountParams.put("omitZeroBalances", true);
+            accountParams.put("omitZeroBalances", false);
             userDataWebsocketClient.account().accountStatus(accountParams);
 
         } catch (Exception e) {
@@ -355,6 +355,7 @@ public class UserListenerWebsocketStream implements ApplicationRunner {
                     if (freeAmount > 0 || lockedAmount > 0) {
                         log.info("  {} - Free: {}, Locked: {}", asset, free, locked);
                     }
+
                     AccountListenerWebsocketStream.accountStatus.getResult().getBalances().forEach((acBalance) -> {
                         if (acBalance.getAsset().toUpperCase().equals(asset.toUpperCase())) {
                             acBalance.setFree(free);
@@ -445,10 +446,10 @@ public class UserListenerWebsocketStream implements ApplicationRunner {
             // If this is a BUY order execution, notify the WebsocketTradeService
             if ("BUY".equals(side)) {
                 try {
-                    websocketTradeService.onBuyOrderExecuted(
-                            orderId,
-                            new java.math.BigDecimal(lastExecutedPrice),
-                            new java.math.BigDecimal(lastExecutedQuantity));
+                    // websocketTradeService.onBuyOrderExecuted(
+                    // orderId,
+                    // new java.math.BigDecimal(lastExecutedPrice),
+                    // new java.math.BigDecimal(lastExecutedQuantity));
 
                     log.info("Notified WebsocketTradeService of buy order execution: {}", orderId);
 

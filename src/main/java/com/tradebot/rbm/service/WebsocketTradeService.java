@@ -10,11 +10,15 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.binance.connector.client.spot.rest.model.ExchangeInfoResponse;
+import com.binance.connector.client.spot.rest.model.OrderType;
+import com.binance.connector.client.spot.rest.model.Side;
 import com.binance.connector.client.spot.websocket.stream.model.BookTickerResponse;
 import com.binance.connector.client.spot.websocket.stream.model.TradeResponse;
+import com.tradebot.rbm.entity.dto.PlaceOrderDto;
+import com.tradebot.rbm.utils.DoubleLimitExample;
 import com.tradebot.rbm.utils.dto.PendingBuyOrderDTO;
 import com.tradebot.rbm.websocket.AccountListenerWebsocketStream;
-import com.tradebot.rbm.websocket.dto.AccountStatusResponse;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,8 +35,10 @@ public class WebsocketTradeService {
 
     // Scalping configuration
     private static final BigDecimal MIN_SPREAD_THRESHOLD = new BigDecimal("0.0001"); // Minimum spread to consider
-    private static final BigDecimal SCALP_MARGIN = new BigDecimal("0.02"); // 0.05% margin for scalping
+    private static final BigDecimal SCALP_MARGIN = new BigDecimal("0.05"); // 0.05% margin for scalping
     private static final BigDecimal MIN_TRADE_AMOUNT = new BigDecimal("5.0"); // Minimum trade amount in USDT
+    private static final BigDecimal MIN_TRADE_AMOUNT_QUOTE = new BigDecimal("0.008"); // Minimum trade amount in quote
+                                                                                      // currency
     private static final BigDecimal MAX_POSITION_PERCENTAGE = new BigDecimal("1"); // Max 100% of balance per trade
     private static final int MAX_RECENT_TRADES = 50; // Keep last 50 trades for analysis
     private static final long TRADE_ANALYSIS_WINDOW_SECONDS = 30; // Analyze trades from last 30 seconds
@@ -41,6 +47,7 @@ public class WebsocketTradeService {
     private final AtomicReference<BookTickerResponse> currentTicker = new AtomicReference<>();
     private final AtomicReference<TradeResponse> lastTrade = new AtomicReference<>();
     private final ConcurrentLinkedQueue<TradeData> recentTrades = new ConcurrentLinkedQueue<>();
+    private final ExchangeInfoResponse exchangeInfoResponse;
 
     // Order tracking
     private final AtomicReference<PendingBuyOrderDTO> pendingBuyOrders = new AtomicReference<>();
@@ -99,7 +106,7 @@ public class WebsocketTradeService {
         }
 
         // Check if any pending buy orders might have been executed
-        checkPendingOrderExecutions(trade);
+        checkPendingOrderExecutions();
 
         // Trigger scalping analysis on new trade
         if (isActivelyTrading) {
@@ -112,16 +119,27 @@ public class WebsocketTradeService {
      * This is a heuristic approach since we don't have direct order execution
      * callbacks
      */
-    private void checkPendingOrderExecutions(TradeResponse trade) {
-        BigDecimal tradePrice = new BigDecimal(trade.getpLowerCase());
-        BigDecimal tradeQuantity = new BigDecimal(trade.getqLowerCase());
+    private void checkPendingOrderExecutions() {
 
         // Check each pending order to see if it could have been executed
         if (pendingBuyOrders.get() != null) {
             var pendingOrder = pendingBuyOrders.get();
+            var buyPrice = pendingOrder.getBuyPrice();
+            var tickerPrice = new BigDecimal(currentTicker.get().getaLowerCase()).add(SCALP_MARGIN);
+            var sellPrice = buyPrice.add(SCALP_MARGIN.multiply(BigDecimal.valueOf(2))).max(tickerPrice);
+            // Get account balances
 
+            var baseAsset = extractBaseAsset(tradingSymbol);
+            // check balance from account
+
+            var quoteBalance = getAssetBalance(baseAsset);
+
+            var canSell = quoteBalance.multiply(sellPrice).compareTo(MIN_TRADE_AMOUNT) > 0;
+            if (canSell) {
+                executeSellOrder(sellPrice, quoteBalance);
+                pendingBuyOrders.set(null);
+            }
         }
-        ;
     }
 
     /**
@@ -162,7 +180,7 @@ public class WebsocketTradeService {
                 return;
             }
 
-            ScalpingAnalysis analysis = performScalpingAnalysis(ticker, trade, accountStatus);
+            ScalpingAnalysis analysis = performScalpingAnalysis(ticker, trade);
 
             if (analysis.shouldTrade()) {
                 executeScalpingStrategy(analysis);
@@ -176,13 +194,12 @@ public class WebsocketTradeService {
     /**
      * Performs comprehensive scalping analysis
      */
-    private ScalpingAnalysis performScalpingAnalysis(BookTickerResponse ticker, TradeResponse trade,
-            AccountStatusResponse accountStatus) {
+    private ScalpingAnalysis performScalpingAnalysis(BookTickerResponse ticker, TradeResponse trade) {
 
-        BigDecimal bidPrice = new BigDecimal(ticker.getbLowerCase());
-        BigDecimal askPrice = new BigDecimal(ticker.getaLowerCase());
-        BigDecimal lastTradePrice = new BigDecimal(trade.getpLowerCase());
-        BigDecimal spread = askPrice.subtract(bidPrice);
+        var bidPrice = new BigDecimal(ticker.getbLowerCase());
+        var askPrice = new BigDecimal(ticker.getaLowerCase());
+        var lastTradePrice = new BigDecimal(trade.getpLowerCase());
+        var spread = askPrice.subtract(bidPrice);
 
         log.debug("Market Analysis - Bid: {}, Ask: {}, Last Trade: {}, Spread: {}",
                 bidPrice, askPrice, lastTradePrice, spread);
@@ -199,8 +216,8 @@ public class WebsocketTradeService {
         String baseAsset = extractBaseAsset(tradingSymbol);
         String quoteAsset = extractQuoteAsset(tradingSymbol);
 
-        BigDecimal baseBalance = getAssetBalance(accountStatus, baseAsset);
-        BigDecimal quoteBalance = getAssetBalance(accountStatus, quoteAsset);
+        BigDecimal baseBalance = getAssetBalance(baseAsset);
+        BigDecimal quoteBalance = getAssetBalance(quoteAsset);
 
         // Determine scalping action
         ScalpingAction action = determineScalpingAction(momentum, bidPrice, askPrice, lastTradePrice,
@@ -332,7 +349,7 @@ public class WebsocketTradeService {
             var currentTickerData = currentTicker.get();
 
             // Set sell price above current ask and with profit margin from buy price
-            var askBasedPrice = new BigDecimal(currentTickerData.getaLowerCase()).add(SCALP_MARGIN.negate());
+            var askBasedPrice = new BigDecimal(currentTickerData.getbLowerCase()).add(SCALP_MARGIN.negate());
             var expectedSellPrice = price.max(askBasedPrice);
 
             // Store the pending buy order
@@ -344,13 +361,13 @@ public class WebsocketTradeService {
 
             // TODO: Integrate with your OrderService to place actual order
             // Example:
-            // PlaceOrderDto orderDto = new PlaceOrderDto();
-            // orderDto.setSymbol(tradingSymbol);
-            // orderDto.setSide(Side.BUY);
-            // orderDto.setType(OrderType.LIMIT);
-            // orderDto.setPrice(price);
-            // orderDto.setQuantity(quantity);
-            // orderDto.setTimeInForce(TimeInForce.GTC);
+            var orderDto = new PlaceOrderDto();
+            orderDto.setTicker(tradingSymbol.toUpperCase());
+            orderDto.setSide(Side.BUY);
+            orderDto.setType(OrderType.LIMIT);
+            orderDto.setPrice(price.doubleValue());
+            orderDto.setAmount(quantity.doubleValue());
+            orderService.placeOrder(orderDto);
             // String actualOrderId = orderService.placeOrder(orderDto);
             //
             // // Update the stored order with actual order ID
@@ -444,8 +461,13 @@ public class WebsocketTradeService {
     private void executeSellOrder(BigDecimal price, BigDecimal quantity) {
         log.info("Placing SELL order - Symbol: {}, Price: {}, Quantity: {}", tradingSymbol, price, quantity);
 
-        // TODO: Integrate with your OrderService to place actual order
-        // Similar to buy order but with Side.SELL
+        var sellOrderDto = new PlaceOrderDto();
+        sellOrderDto.setTicker(tradingSymbol.toUpperCase());
+        sellOrderDto.setSide(Side.SELL);
+        sellOrderDto.setType(OrderType.LIMIT);
+        sellOrderDto.setPrice(price.doubleValue());
+        sellOrderDto.setAmount(quantity.doubleValue());
+        orderService.placeOrder(sellOrderDto);
 
         log.info("SELL order placed successfully");
     }
@@ -458,7 +480,23 @@ public class WebsocketTradeService {
 
         if (isBuy) {
             // For buy orders, divide available quote balance by price
-            return maxAmount.divide(price, 8, RoundingMode.DOWN);
+            if (tradingSymbol.toUpperCase().endsWith("BNBFDUSD")) {
+                // Calculate how many BNB can be bought with maxAmount FDUSD at the given price
+                maxAmount = maxAmount.divide(price, 8, RoundingMode.DOWN);
+            }
+            for (var symbol : exchangeInfoResponse.getSymbols()) {
+                for (var filter : symbol.getFilters()) {
+                    if (filter.getFilterType().equals("LOT_SIZE")) {
+                        var stepSize = new BigDecimal(filter.getStepSize());
+                        // quantity % stepSize == 0
+                        BigDecimal steps = maxAmount.divide(stepSize, 0, RoundingMode.DOWN);
+                        maxAmount = steps.multiply(stepSize);
+                        continue;
+                    }
+                }
+            }
+            return BigDecimal.valueOf(DoubleLimitExample.limitDecimal(maxAmount.doubleValue(), 3));
+
         } else {
             // For sell orders, use the base balance directly
             return maxAmount;
@@ -468,12 +506,29 @@ public class WebsocketTradeService {
     /**
      * Gets balance for a specific asset from account status
      */
-    private BigDecimal getAssetBalance(AccountStatusResponse accountStatus, String asset) {
-        return accountStatus.getResult().getBalances().stream()
+    private BigDecimal getAssetBalance(String asset) {
+        var acc = AccountListenerWebsocketStream.accountStatus.getResult();
+        var quoteBalance = acc.getBalances().stream()
                 .filter(balance -> asset.equals(balance.getAsset()))
                 .map(balance -> new BigDecimal(balance.getFree()))
                 .findFirst()
                 .orElse(BigDecimal.ZERO);
+        if (asset.equals("BNB") && quoteBalance.compareTo(MIN_TRADE_AMOUNT_QUOTE) < 0) {
+            for (var symbol : exchangeInfoResponse.getSymbols()) {
+                for (var filter : symbol.getFilters()) {
+                    if (filter.getFilterType().equals("LOT_SIZE")) {
+                        var stepSize = new BigDecimal(filter.getStepSize());
+                        // quantity % stepSize == 0
+                        BigDecimal steps = quoteBalance.divide(stepSize, 0, RoundingMode.DOWN);
+                        quoteBalance = steps.multiply(stepSize);
+                        continue;
+                    }
+                }
+            }
+            return BigDecimal.valueOf(DoubleLimitExample.limitDecimal(quoteBalance.doubleValue(), 3));
+        }
+
+        return BigDecimal.valueOf(DoubleLimitExample.limitDecimal(quoteBalance.doubleValue(), 5));
     }
 
     /**

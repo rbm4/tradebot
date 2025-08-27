@@ -181,6 +181,6 @@ public class OrderService {
         var resultingOrder = binanceAdapter.placeOrder(order);
         log.info("Order placed successfully: {}", resultingOrder.toJson());
         // Save the order details to the database
-        orderRepository.save(new OrderEntity(resultingOrder));
+        // orderRepository.save(new OrderEntity(resultingOrder));
     }
 }
