@@ -210,25 +210,25 @@ private BigDecimal getAssetBalance(String asset) {
 ## Data Flow
 
 ```mermaid
-graph TD
-    A[Environment Variables] --> B[BinanceConfig]
-    B --> C[SignatureConfiguration]
-    C --> D[BinanceWebsocketComponent]
-    D --> E[SpotWebSocketStreams]
-    D --> F[WebSocketApiClientImpl]
+graph TD;
+    A[Environment Variables] --> B[BinanceConfig];
+    B --> C[SignatureConfiguration];
+    C --> D[BinanceWebsocketComponent];
+    D --> E[SpotWebSocketStreams];
+    D --> F[WebSocketApiClientImpl];
     
-    E --> G[TradeWebsocketStream]
-    E --> H[TickerWebsocketStream]
-    F --> I[AccountListenerWebsocketStream]
+    E --> G[TradeWebsocketStream];
+    E --> H[TickerWebsocketStream];
+    F --> I[AccountListenerWebsocketStream];
     
-    G --> J[WebsocketTradeService.updateTrade()]
-    H --> J2[WebsocketTradeService.updateTicker()]
-    I --> K[AccountStatusResponse]
+    G --> J[WebsocketTradeService.updateTrade()];
+    H --> J2[WebsocketTradeService.updateTicker()];
+    I --> K[AccountStatusResponse];
     
-    J --> L[Trading Analysis]
-    J2 --> L
-    K --> L
-    L --> M[Order Execution]
+    J --> L[Trading Analysis];
+    J2 --> L;
+    K --> L;
+    L --> M[Order Execution];
 ```
 
 ### Step-by-Step Flow
