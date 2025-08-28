@@ -221,8 +221,8 @@ graph TD;
     E --> H[TickerWebsocketStream];
     F --> I[AccountListenerWebsocketStream];
     
-    G --> J[WebsocketTradeService.updateTrade()];
-    H --> J2[WebsocketTradeService.updateTicker()];
+    G --> J[WebsocketTradeService.updateTrade];
+    H --> J2[WebsocketTradeService.updateTicker];
     I --> K[AccountStatusResponse];
     
     J --> L[Trading Analysis];
