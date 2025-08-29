@@ -20,7 +20,7 @@ spring:
   # JPA Configuration for Development
   jpa:
     hibernate:
-      ddl-auto: create-drop  # Recreate schema on startup (dev only)
+      ddl-auto: update  # Recreate schema on startup (dev only)
     show-sql: true
     format-sql: true
     database-platform: org.hibernate.dialect.PostgreSQLDialect

@@ -20,7 +20,7 @@ import com.tradebot.rbm.utils.dto.stochasticOscilator.StochasticTrend;
  */
 public class StochasticOscillatorUtils {
 
-    private static final int DEFAULT_K_PERIOD = 14;
+    private static final int DEFAULT_K_PERIOD = 5;
     private static final int DEFAULT_D_PERIOD = 3;
     private static final BigDecimal OVERBOUGHT_THRESHOLD = new BigDecimal("80");
     private static final BigDecimal OVERSOLD_THRESHOLD = new BigDecimal("20");

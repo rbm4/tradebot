@@ -23,9 +23,8 @@ public class TechnicalAnalysisDemo {
      * This method shows integration with your existing
      * ConcurrentLinkedQueue<TradeData>
      */
-    public static void demonstrateStochasticAnalysis() {
+    public static void demonstrateStochasticAnalysis(List<PriceData> priceDataList) {
         // Example: Convert your existing trade data to price data for analysis
-        List<PriceData> priceDataList = createSamplePriceData();
 
         try {
             // Perform complete Stochastic Oscillator analysis
@@ -362,7 +361,7 @@ public class TechnicalAnalysisDemo {
     public static void main(String[] args) {
         System.out.println("=== TECHNICAL ANALYSIS UTILITIES DEMO ===\n");
 
-        demonstrateStochasticAnalysis();
+        // demonstrateStochasticAnalysis();
         demonstrateBollingerBandsAnalysis();
 
         System.out.println("\n=== COMBINED ANALYSIS DEMO ===");

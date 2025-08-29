@@ -199,7 +199,7 @@ public class UserListenerWebsocketStream implements ApplicationRunner {
     private void connectToUserDataStreamDirectly(String streamUrl) {
         try {
             // Create WebSocket client configuration
-            org.eclipse.jetty.websocket.client.WebSocketClient client = new org.eclipse.jetty.websocket.client.WebSocketClient();
+            var client = new org.eclipse.jetty.websocket.client.WebSocketClient();
 
             client.start();
 

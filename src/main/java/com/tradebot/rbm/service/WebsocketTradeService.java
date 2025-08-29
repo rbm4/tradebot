@@ -56,12 +56,8 @@ public class WebsocketTradeService {
 
     // Trading state
     private volatile boolean isActivelyTradingTicker = false;
-    private volatile boolean isActivelyTrading = true;
+    private volatile boolean isActivelyTrading = false;
     private volatile LocalDateTime lastOrderTime = LocalDateTime.now().minus(1, ChronoUnit.MINUTES);
-
-    /**
-     * Internal class to store pending buy order information
-     */
 
     /**
      * Updates the current ticker data from TickerWebsocketStream
