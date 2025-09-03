@@ -11,6 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -24,12 +25,19 @@ public class PriceDataEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @NotNull
     private BigDecimal open;
+    @NotNull
     private BigDecimal high;
+    @NotNull
     private BigDecimal low;
+    @NotNull
     private BigDecimal close;
+    @NotNull
     private BigDecimal volume;
+    @NotNull
     private int tradeCount;
+    @NotNull
     private LocalDateTime timestamp;
 
     public PriceDataEntity(PriceBucket bucket) {

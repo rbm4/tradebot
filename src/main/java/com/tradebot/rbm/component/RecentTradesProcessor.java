@@ -33,7 +33,7 @@ public class RecentTradesProcessor implements ApplicationRunner {
                     Thread.sleep(60000);
                     var newBucket = new PriceBucket(LocalDateTime.now());
                     var tradeInQuestion = RecentTradeUtils.recentTrades.poll();
-                    while (tradeInQuestion != null) {
+                    while (RecentTradeUtils.recentTrades.size() > 1000) {
                         var tradeData = tradeInQuestion.getTrade();
                         var price = new BigDecimal(tradeData.getpLowerCase());
                         var qty = new BigDecimal(tradeData.getqLowerCase());

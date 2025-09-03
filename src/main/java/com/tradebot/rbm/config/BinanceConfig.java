@@ -8,12 +8,15 @@ import com.binance.connector.client.SpotClient;
 import com.binance.connector.client.common.ApiResponse;
 import com.binance.connector.client.common.configuration.ClientConfiguration;
 import com.binance.connector.client.common.configuration.SignatureConfiguration;
+import com.binance.connector.client.common.websocket.configuration.WebSocketClientConfiguration;
 import com.binance.connector.client.impl.SpotClientImpl;
 import com.binance.connector.client.spot.rest.SpotRestApiUtil;
 import com.binance.connector.client.spot.rest.api.SpotRestApi;
 import com.binance.connector.client.spot.rest.model.ExchangeInfoResponse;
 import com.binance.connector.client.spot.rest.model.Permissions;
 import com.binance.connector.client.spot.rest.model.Symbols;
+import com.binance.connector.client.spot.websocket.api.SpotWebSocketApiUtil;
+import com.binance.connector.client.spot.websocket.api.api.SpotWebSocketApi;
 
 @Configuration
 public class BinanceConfig {
@@ -23,6 +26,10 @@ public class BinanceConfig {
     private String key;
     @Value("${binance.trading.symbol:BTCUSDT}")
     private String tradingSymbol;
+    @Value("${binance.spotWsKey}")
+    private String spotWsKey;
+    @Value("${binance.spotWsLoc}")
+    private String spotWsLoc;
 
     @Bean
     public SpotClient binanceSpotClient() {
@@ -46,6 +53,11 @@ public class BinanceConfig {
     }
 
     @Bean
+    public SpotWebSocketApi spotWebSocketApi() {
+        return new SpotWebSocketApi(getWsConfig());
+    }
+
+    @Bean
     public SignatureConfiguration signatureConfiguration() {
         SignatureConfiguration signatureConfiguration = new SignatureConfiguration();
         signatureConfiguration.setApiKey(key);
@@ -53,13 +65,30 @@ public class BinanceConfig {
         return signatureConfiguration;
     }
 
+    public WebSocketClientConfiguration getWsConfig() {
+        WebSocketClientConfiguration clientConfiguration = SpotWebSocketApiUtil.getClientConfiguration();
+        // if you want the connection to be auto logged on:
+        // https://developers.binance.com/docs/binance-spot-api-docs/websocket-api/authentication-requests
+        clientConfiguration.setAutoLogon(true);
+        var signatureConfiguration = new SignatureConfiguration();
+        signatureConfiguration.setApiKey(spotWsKey);
+        signatureConfiguration.setPrivateKey(spotWsLoc);
+        clientConfiguration.setSignatureConfiguration(signatureConfiguration);
+        return clientConfiguration;
+    }
+
     public ClientConfiguration getConfig() {
         ClientConfiguration clientConfiguration = SpotRestApiUtil.getClientConfiguration();
+        SignatureConfiguration signatureConfiguration = getSignatureConfiguration();
+        clientConfiguration.setSignatureConfiguration(signatureConfiguration);
+        return clientConfiguration;
+    }
+
+    private SignatureConfiguration getSignatureConfiguration() {
         SignatureConfiguration signatureConfiguration = new SignatureConfiguration();
         signatureConfiguration.setApiKey(key);
         signatureConfiguration.setSecretKey(secret);
-        clientConfiguration.setSignatureConfiguration(signatureConfiguration);
-        return clientConfiguration;
+        return signatureConfiguration;
     }
 
 }

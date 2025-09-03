@@ -12,6 +12,7 @@ public class PlaceOrderDto {
     private OrderType type;
     private double price;
     private double amount;
+    private double stop;
 
     public PlaceOrderDto() {
     }

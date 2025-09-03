@@ -9,6 +9,7 @@ import lombok.Data;
 public class PendingBuyOrderDTO {
     final String orderId;
     final String symbol;
+    private Long binanceOrderId;
     final BigDecimal buyPrice;
     final BigDecimal quantity;
     final LocalDateTime timestamp;

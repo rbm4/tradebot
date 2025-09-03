@@ -9,12 +9,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.binance.connector.client.common.ApiResponse;
+import com.binance.connector.client.spot.rest.model.DepthResponse;
 import com.binance.connector.client.spot.rest.model.ExchangeInfoResponse;
-import com.binance.connector.client.spot.rest.model.OrderType;
+import com.binance.connector.client.spot.rest.model.OrderOcoRequest;
+import com.binance.connector.client.spot.rest.model.OrderOcoResponse;
 import com.binance.connector.client.spot.rest.model.Side;
+import com.binance.connector.client.spot.websocket.api.model.OrderPlaceRequest;
+import com.binance.connector.client.spot.websocket.api.model.TimeInForce;
 import com.binance.connector.client.spot.websocket.stream.model.BookTickerResponse;
 import com.binance.connector.client.spot.websocket.stream.model.TradeResponse;
-import com.tradebot.rbm.entity.dto.PlaceOrderDto;
 import com.tradebot.rbm.utils.DoubleLimitExample;
 import com.tradebot.rbm.utils.RecentTradeUtils;
 import com.tradebot.rbm.utils.ScalpingAnalysis;
@@ -39,12 +43,12 @@ public class WebsocketTradeService {
 
     // Scalping configuration
     private static final BigDecimal MIN_SPREAD_THRESHOLD = new BigDecimal("0.0001"); // Minimum spread to consider
-    private static final BigDecimal SCALP_MARGIN = new BigDecimal("0.05"); // 0.05% margin for scalping
+    private static final BigDecimal SCALP_MARGIN = new BigDecimal("0.04"); // 0.04$ margin for scalping
     private static final BigDecimal MIN_TRADE_AMOUNT = new BigDecimal("5.0"); // Minimum trade amount in USDT
     private static final BigDecimal MIN_TRADE_AMOUNT_QUOTE = new BigDecimal("0.008"); // Minimum trade amount in quote
                                                                                       // currency
     private static final BigDecimal MAX_POSITION_PERCENTAGE = new BigDecimal("1"); // Max 100% of balance per trade
-    private static final long TRADE_ANALYSIS_WINDOW_SECONDS = 30; // Analyze trades from last 30 seconds
+    private static final long TRADE_ANALYSIS_WINDOW_SECONDS = 2400; // Analyze trades from last 240 seconds
 
     // Real-time data containers
     private final AtomicReference<BookTickerResponse> currentTicker = new AtomicReference<>();
@@ -53,11 +57,12 @@ public class WebsocketTradeService {
 
     // Order tracking
     private final AtomicReference<PendingBuyOrderDTO> pendingBuyOrders = new AtomicReference<>();
+    private final AtomicReference<OrderOcoResponse> pendingSellOrders = new AtomicReference<>();
 
     // Trading state
     private volatile boolean isActivelyTradingTicker = false;
-    private volatile boolean isActivelyTrading = false;
-    private volatile LocalDateTime lastOrderTime = LocalDateTime.now().minus(1, ChronoUnit.MINUTES);
+    private volatile boolean isActivelyTrading = true;
+    public static volatile LocalDateTime lastOrderTime = LocalDateTime.now().minus(1, ChronoUnit.MINUTES);
 
     /**
      * Updates the current ticker data from TickerWebsocketStream
@@ -100,7 +105,11 @@ public class WebsocketTradeService {
         if (pendingBuyOrders.get() != null) {
             var pendingOrder = pendingBuyOrders.get();
             var buyPrice = pendingOrder.getBuyPrice();
-            var tickerPrice = new BigDecimal(currentTicker.get().getaLowerCase()).add(SCALP_MARGIN);
+            Integer limit = 5;
+            ApiResponse<DepthResponse> response = orderService.depth(tradingSymbol, limit);
+            var bid = new BigDecimal(response.getData().getBids().get(0).get(0));
+
+            var tickerPrice = bid.add(SCALP_MARGIN.divide(BigDecimal.valueOf(2)));
             var sellPrice = buyPrice.add(SCALP_MARGIN.multiply(BigDecimal.valueOf(2))).max(tickerPrice);
             // Get account balances
 
@@ -132,10 +141,12 @@ public class WebsocketTradeService {
                 return;
             }
 
-            // Prevent too frequent trading
-            if (ChronoUnit.SECONDS.between(lastOrderTime, LocalDateTime.now()) < 10) {
-                log.debug("Cooling down - last order was {} seconds ago",
-                        ChronoUnit.SECONDS.between(lastOrderTime, LocalDateTime.now()));
+            // Cancel current buy order if is sitting too long
+            if (ChronoUnit.SECONDS.between(lastOrderTime, LocalDateTime.now()) > 10 && pendingBuyOrders.get() != null) {
+                log.debug("Cancelling Buy order");
+                orderService.deleteBinanceOrder(tradingSymbol.toUpperCase(),
+                        pendingBuyOrders.get().getBinanceOrderId());
+                pendingBuyOrders.set(null);
                 return;
             }
 
@@ -305,10 +316,13 @@ public class WebsocketTradeService {
             var orderId = "BUY_" + System.currentTimeMillis();
 
             // Calculate expected sell price with profit margin
-            var currentTickerData = currentTicker.get();
+            // var currentTickerData = currentTicker.get();
+            Integer limit = 5;
+            ApiResponse<DepthResponse> response = orderService.depth(tradingSymbol, limit);
+            var ask = new BigDecimal(response.getData().getAsks().get(0).get(0));
 
             // Set sell price above current ask and with profit margin from buy price
-            var askBasedPrice = new BigDecimal(currentTickerData.getbLowerCase()).add(SCALP_MARGIN.negate());
+            var askBasedPrice = ask.add(SCALP_MARGIN.negate());
             var expectedSellPrice = price.max(askBasedPrice);
 
             // Store the pending buy order
@@ -318,15 +332,14 @@ public class WebsocketTradeService {
 
             log.info("Buy order stored - ID: {}, Expected sell price: {}", orderId, expectedSellPrice);
 
-            // TODO: Integrate with your OrderService to place actual order
-            // Example:
-            var orderDto = new PlaceOrderDto();
-            orderDto.setTicker(tradingSymbol.toUpperCase());
-            orderDto.setSide(Side.BUY);
-            orderDto.setType(OrderType.LIMIT);
+            var orderDto = new OrderPlaceRequest();
+            orderDto.setSymbol(tradingSymbol.toUpperCase());
+            orderDto.setSide(com.binance.connector.client.spot.websocket.api.model.Side.BUY);
+            orderDto.setType(com.binance.connector.client.spot.websocket.api.model.OrderType.LIMIT);
             orderDto.setPrice(price.doubleValue());
-            orderDto.setAmount(quantity.doubleValue());
-            orderService.placeOrder(orderDto);
+            orderDto.setQuantity(quantity.doubleValue());
+            orderDto.setTimeInForce(TimeInForce.GTC);
+            orderService.placeWsOrder(orderDto, pendingOrder);
 
             log.info("BUY order placed successfully - Monitoring for execution");
 
@@ -340,14 +353,30 @@ public class WebsocketTradeService {
      */
     private void executeSellOrder(BigDecimal price, BigDecimal quantity) {
         log.info("Placing SELL order - Symbol: {}, Price: {}, Quantity: {}", tradingSymbol, price, quantity);
-
-        var sellOrderDto = new PlaceOrderDto();
-        sellOrderDto.setTicker(tradingSymbol.toUpperCase());
-        sellOrderDto.setSide(Side.SELL);
-        sellOrderDto.setType(OrderType.LIMIT);
-        sellOrderDto.setPrice(price.doubleValue());
-        sellOrderDto.setAmount(quantity.doubleValue());
-        orderService.placeOrder(sellOrderDto);
+        var stopPrice = price.doubleValue() - (price.doubleValue() * 0.003);
+        stopPrice = DoubleLimitExample.limitDecimal(stopPrice, 2);
+        try {
+            var sellOrderDto = new OrderOcoRequest();
+            sellOrderDto.setSymbol(tradingSymbol.toUpperCase());
+            sellOrderDto.setSide(Side.SELL);
+            sellOrderDto.setPrice(price.doubleValue());
+            sellOrderDto.setStopPrice(stopPrice);
+            sellOrderDto.setQuantity(adjustLotSize(new BigDecimal(quantity.doubleValue())).doubleValue());
+            var sellOrderResult = orderService.placeOcoOrder(sellOrderDto);
+            pendingSellOrders.set(sellOrderResult);
+        } catch (Exception e) {
+            log.error("Error placing sell order", e);
+        }
+        // orderService.placeOcoOrder(sellOrderDto);
+        // var orderDto = new OrderPlaceRequest();
+        // orderDto.setSymbol(tradingSymbol.toUpperCase());
+        // orderDto.setSide(com.binance.connector.client.spot.websocket.api.model.Side.SELL);
+        // orderDto.setType(com.binance.connector.client.spot.websocket.api.model.OrderType.LIMIT);
+        // orderDto.setPrice(price.doubleValue());
+        // orderDto.setQuantity(adjustLotSize(new
+        // BigDecimal(quantity.doubleValue())).doubleValue());
+        // orderDto.setTimeInForce(TimeInForce.GTC);
+        // orderService.placeWsOrder(orderDto);
 
         log.info("SELL order placed successfully");
     }
@@ -364,23 +393,28 @@ public class WebsocketTradeService {
                 // Calculate how many BNB can be bought with maxAmount FDUSD at the given price
                 maxAmount = maxAmount.divide(price, 8, RoundingMode.DOWN);
             }
-            for (var symbol : exchangeInfoResponse.getSymbols()) {
-                for (var filter : symbol.getFilters()) {
-                    if (filter.getFilterType().equals("LOT_SIZE")) {
-                        var stepSize = new BigDecimal(filter.getStepSize());
-                        // quantity % stepSize == 0
-                        BigDecimal steps = maxAmount.divide(stepSize, 0, RoundingMode.DOWN);
-                        maxAmount = steps.multiply(stepSize);
-                        continue;
-                    }
-                }
-            }
+            maxAmount = adjustLotSize(maxAmount);
             return BigDecimal.valueOf(DoubleLimitExample.limitDecimal(maxAmount.doubleValue(), 3));
 
         } else {
             // For sell orders, use the base balance directly
             return maxAmount;
         }
+    }
+
+    private BigDecimal adjustLotSize(BigDecimal maxAmount) {
+        for (var symbol : exchangeInfoResponse.getSymbols()) {
+            for (var filter : symbol.getFilters()) {
+                if (filter.getFilterType().equals("LOT_SIZE")) {
+                    var stepSize = new BigDecimal(filter.getStepSize());
+                    // quantity % stepSize == 0
+                    BigDecimal steps = maxAmount.divide(stepSize, 0, RoundingMode.DOWN);
+                    maxAmount = steps.multiply(stepSize);
+                    continue;
+                }
+            }
+        }
+        return maxAmount;
     }
 
     /**
@@ -394,17 +428,7 @@ public class WebsocketTradeService {
                 .findFirst()
                 .orElse(BigDecimal.ZERO);
         if (asset.equals("BNB") && quoteBalance.compareTo(MIN_TRADE_AMOUNT_QUOTE) < 0) {
-            for (var symbol : exchangeInfoResponse.getSymbols()) {
-                for (var filter : symbol.getFilters()) {
-                    if (filter.getFilterType().equals("LOT_SIZE")) {
-                        var stepSize = new BigDecimal(filter.getStepSize());
-                        // quantity % stepSize == 0
-                        BigDecimal steps = quoteBalance.divide(stepSize, 0, RoundingMode.DOWN);
-                        quoteBalance = steps.multiply(stepSize);
-                        continue;
-                    }
-                }
-            }
+            quoteBalance = adjustLotSize(quoteBalance);
             return BigDecimal.valueOf(DoubleLimitExample.limitDecimal(quoteBalance.doubleValue(), 3));
         }
 

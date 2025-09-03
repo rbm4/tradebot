@@ -8,11 +8,17 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.binance.connector.client.common.ApiResponse;
+import com.binance.connector.client.spot.rest.model.DepthResponse;
 import com.binance.connector.client.spot.rest.model.GetOpenOrdersResponse;
+import com.binance.connector.client.spot.rest.model.OrderOcoRequest;
+import com.binance.connector.client.spot.rest.model.OrderOcoResponse;
+import com.binance.connector.client.spot.websocket.api.model.OrderPlaceRequest;
 import com.tradebot.rbm.adapter.BinanceAdapter;
 import com.tradebot.rbm.entity.OrderEntity;
 import com.tradebot.rbm.entity.dto.PlaceOrderDto;
 import com.tradebot.rbm.repository.OrderRepository;
+import com.tradebot.rbm.utils.dto.PendingBuyOrderDTO;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -182,5 +188,21 @@ public class OrderService {
         log.info("Order placed successfully: {}", resultingOrder.toJson());
         // Save the order details to the database
         // orderRepository.save(new OrderEntity(resultingOrder));
+    }
+
+    public void placeWsOrder(OrderPlaceRequest order, PendingBuyOrderDTO pendingOrder) {
+        binanceAdapter.placeWsOrder(order, pendingOrder);
+    }
+
+    public OrderOcoResponse placeOcoOrder(OrderOcoRequest order) {
+        var resultingOrder = binanceAdapter.placeOcoOrder(order);
+        log.info("OCO Order placed successfully: {}", resultingOrder.toJson());
+        // Save the order details to the database
+        // orderRepository.save(new OrderEntity(resultingOrder));
+        return resultingOrder;
+    }
+
+    public ApiResponse<DepthResponse> depth(String symbol, Integer limit) {
+        return binanceAdapter.depth(symbol.toUpperCase(), limit);
     }
 }
