@@ -35,3 +35,8 @@ build/
 ### VS Code ###
 .vscode/
 logs/
+src/main/resources/id_ed25519
+.gitignore
+src/main/resources/id_ed25519.tar.gz
+src/main/resources/private_key_pkcs8.pem
+src/main/resources/id_ed25519.pub
